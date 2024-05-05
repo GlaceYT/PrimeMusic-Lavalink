@@ -1,0 +1,21 @@
+{
+  "name": "Prime Music",
+  "version": "1.0",
+  "description": "Music Bot",
+  "main": "index.js",
+  "dependencies": {
+    "discord.js": "^14.15.1",
+    "dotenv": "^16.4.5",
+    "erela.js": "^2.4.0",
+    "express": "^4.19.2",
+    "riffy": "^1.0.3"
+  },
+  "scripts": {
+    "start": "node index.js"
+  },
+  "author": "GlaceYT",
+  "license": "XX",
+  "engines": {
+    "node": "20.x"
+  }
+}
