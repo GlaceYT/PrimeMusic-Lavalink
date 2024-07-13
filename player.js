@@ -7,17 +7,16 @@ const config = require("./config.js");
 function initializePlayer(client) {
     const nodes = [
         {
-            host: "lava-v3.ajieblogs.eu.org",
-            port: 443,
-            password: "lava-v3.ajieblogs.eu.org",
+            host: "37.114.42.191",
+            port: 6767,
+            password: "danteisnttaken",
             reconnectTimeout: 5000,
             reconnectTries: Infinity,
-            secure: true
-
+            secure: false
         },
     ];
 
-client.riffy = new Riffy(client, nodes, {
+    client.riffy = new Riffy(client, nodes, {
         send: (payload) => {
             const guildId = payload.d.guild_id;
             if (!guildId) return;
@@ -167,9 +166,8 @@ client.riffy = new Riffy(client, nodes, {
                 disableLoop(player, channel);
             } else if (i.customId === 'showQueue') {
                 const queueMessage = queueNames.length > 0 ?
-                    `🎵 **Now Playing:**\n${queueNames[0]}\n\n📜 **Queue:**\n${queueNames.slice(1).map((song, index) => `${index + 1}. ${song}`).join('\n')}` :
+                    `🎵 **Now Playing:**\n${formatTrack(queueNames[0])}\n\n📜 **Queue:**\n${queueNames.slice(1).map((song, index) => `${index + 1}. ${formatTrack(song)}`).join('\n')}` :
                     "The queue is empty.";
-
                 const queueEmbed = new EmbedBuilder()
                     .setColor(config.embedColor)
                     .setTitle("📜 **Current Queue**")
@@ -300,12 +298,17 @@ client.riffy = new Riffy(client, nodes, {
         player.queue.clear();
         queueNames.length = 0;
     }
+    
+    function formatTrack(track) {
+        const match = track.match(/\[(.*?) - (.*?)\]\((.*?)\)/);
+        if (match) {
+            const [, title, author, uri] = match;
+            return `[${title} - ${author}](${uri})`;
+        }
+        return track; 
+    }
 
-  
-
-    module.exports = { initializePlayer, setLoop, clearQueue};
+    module.exports = { initializePlayer, setLoop, clearQueue ,formatTrack };
 }
 
 module.exports = { initializePlayer };
-    
-
