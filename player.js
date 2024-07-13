@@ -8,10 +8,10 @@ const config = require("./config.js");
 function initializePlayer(client) {
     const nodes = [
         {
-            host: "37.114.42.191",
-            port: 6767,
-            password: "danteisnttaken",
-            secure: false
+            host: "lava-v3.ajieblogs.eu.org",
+            port: 443,
+            password: "https://dsc.gg/ajidevserver",
+            secure: true
         },
     ];
 
