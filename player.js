@@ -17,7 +17,7 @@ function initializePlayer(client) {
         },
     ];
 
-    client.riffy = new Riffy(client, nodes, {
+      client.riffy = new Riffy(client, nodes, {
         send: (payload) => {
             const guildId = payload.d.guild_id;
             if (!guildId) return;
@@ -56,9 +56,9 @@ function initializePlayer(client) {
 
         const embed = new EmbedBuilder()
             .setAuthor({
-               name: 'Now Playing',
-               iconURL: config.MusicIcon
-             })
+                name: 'Now Playing',
+                iconURL: config.MusicIcon
+            })
             .setDescription('🎶 **Controls:**\n 🔁 `Loop`, ❌ `Disable`, ⏭️ `Skip`, 📜 `Queue`, 🗑️ `Clear`\n ⏹️ `Stop`, ⏸️ `Pause`, ▶️ `Resume`, 🔊 `Vol Up`, 🔉 `Vol Down`')
             .setImage('attachment://musicard.png')
             .setColor(config.embedColor);
@@ -166,31 +166,24 @@ function initializePlayer(client) {
             } else if (i.customId === 'disableLoop') {
                 disableLoop(player, channel);
             } else if (i.customId === 'showQueue') {
-                const pageSize = 10;
-
                 const queueMessage = queueNames.length > 0 ?
-                    queueNames.map((song, index) => `${index + 1}. ${song}`).join('\n') :
+                    `🎵 **Now Playing:**\n${queueNames[0]}\n\n📜 **Queue:**\n${queueNames.slice(1).map((song, index) => `${index + 1}. ${song}`).join('\n')}` :
                     "The queue is empty.";
 
-                const pages = [];
-                for (let i = 0; i < queueNames.length; i += pageSize) {
-                    const page = queueNames.slice(i, i + pageSize);
-                    pages.push(page);
-                }
+                const queueEmbed = new EmbedBuilder()
+                    .setColor(config.embedColor)
+                    .setTitle("📜 **Current Queue**")
+                    .setDescription(queueMessage);
 
-                for (let i = 0; i < pages.length; i++) {
-                    const numberedSongs = pages[i].map((song, index) => `${index + 1}. ${song}`).join('\n');
-
-                    const queueEmbed = new EmbedBuilder()
-                        .setColor(config.embedColor)
-                        .setTitle(`📜 **Current Queue (Page ${i + 1}/${pages.length})**`)
-                        .setDescription(numberedSongs);
-
-                    await channel.send({ embeds: [queueEmbed] });
-                }
+                await channel.send({ embeds: [queueEmbed] });
             } else if (i.customId === 'clearQueue') {
                 clearQueue(player);
-                disableLoop(player, channel);
+                const clearQueueEmbed = new EmbedBuilder()
+                    .setColor(config.embedColor)
+                    .setTitle("🗑️ **Queue has been cleared!**")
+                    .setTimestamp();
+
+                await channel.send({ embeds: [clearQueueEmbed] });
             } else if (i.customId === 'stopTrack') {
                 player.stop();
                 player.destroy();
@@ -237,87 +230,97 @@ function initializePlayer(client) {
                         .setColor(config.embedColor)
                         .setDescription(`🔉 **Volume decreased by ${oldVolume - player.volume}% to ${player.volume}!**`);
 
-                    await channel.send({ embeds: [volumeDownEmbed] });
-                } else {
-                    const minVolumeEmbed = new EmbedBuilder()
-                        .setColor(config.embedColor)
-                        .setDescription('🔉 **Volume is already at minimum!**');
-
-                    await channel.send({ embeds: [minVolumeEmbed] });
+                        await channel.send({ embeds: [volumeDownEmbed] });
+                    } else {
+                        const minVolumeEmbed = new EmbedBuilder()
+                            .setColor(config.embedColor)
+                            .setDescription('🔉 **Volume is already at minimum!**');
+    
+                        await channel.send({ embeds: [minVolumeEmbed] });
+                    }
                 }
+            });
+    
+            collector.on('end', collected => {
+                console.log(`Collected ${collected.size} interactions.`);
+            });
+        });
+    
+        client.riffy.on("queueEnd", async (player) => {
+            const channel = client.channels.cache.get(player.textChannel);
+            const autoplay = false;
+    
+            if (autoplay) {
+                player.autoplay(player);
+            } else {
+                player.destroy();
+                const queueEmbed = new EmbedBuilder()
+                    .setColor(config.embedColor)
+                    .setDescription('**Queue Songs ended! Disconnecting Bot!**');
+    
+                await channel.send({ embeds: [queueEmbed] });
             }
         });
-
-        collector.on('end', collected => {
-            console.log(`Collected ${collected.size} interactions.`);
-        });
-    });
-
-    client.riffy.on("queueEnd", async (player) => {
-        const channel = client.channels.cache.get(player.textChannel);
-        const autoplay = false;
-
-        if (autoplay) {
-            player.autoplay(player);
-        } else {
-            player.destroy();
+    
+        function toggleLoop(player, channel) {
+            if (player.loop === "track") {
+                player.setLoop("queue");
+                const loopEmbed = new EmbedBuilder()
+                    .setColor(config.embedColor)
+                    .setTitle("🔁 **Queue loop is activated!**");
+                channel.send({ embeds: [loopEmbed] });
+            } else {
+                player.setLoop("track");
+                const loopEmbed = new EmbedBuilder()
+                    .setColor(config.embedColor)
+                    .setTitle("🔁 **Track loop is activated!**");
+                channel.send({ embeds: [loopEmbed] });
+            }
+        }
+    
+        function disableLoop(player, channel) {
+            player.setLoop("none");
+            const loopEmbed = new EmbedBuilder()
+                .setColor(config.embedColor)
+                .setTitle("❌ **Loop is disabled!**");
+            channel.send({ embeds: [loopEmbed] });
+        }
+    
+        function setLoop(player, loopType) {
+            if (loopType === "track") {
+                player.setLoop("track");
+            } else if (loopType === "queue") {
+                player.setLoop("queue");
+            } else {
+                player.setLoop("none");
+            }
+        }
+    
+        function clearQueue(player) {
+            player.queue.clear();
+            queueNames.length = 0;
+        }
+    
+        function showQueue(channel, queue) {
+            const queueList = queue.map((track, index) => {
+                if (index === 0) {
+                    return `🎵 **Now Playing:**\n${track.info.title} - ${track.info.author}\n`;
+                } else {
+                    return `${index}. ${track.info.title} - ${track.info.author}`;
+                }
+            }).join('\n');
+    
             const queueEmbed = new EmbedBuilder()
                 .setColor(config.embedColor)
-                .setDescription('**Queue Songs ended! Disconnecting Bot!**');
-
-            await channel.send({ embeds: [queueEmbed] });
+                .setTitle("📜 **Current Queue**")
+                .setDescription(queueList);
+    
+            channel.send({ embeds: [queueEmbed] });
         }
-    });
-
-    function toggleLoop(player, channel) {
-        if (player.loop === "track") {
-            player.setLoop("queue");
-            const loopEmbed = new EmbedBuilder()
-                .setColor(config.embedColor)
-                .setTitle("🔁 **Queue loop is activated!**");
-            channel.send({ embeds: [loopEmbed] });
-        } else {
-            player.setLoop("track");
-            const loopEmbed = new EmbedBuilder()
-                .setColor(config.embedColor)
-                .setTitle("🔁 **Track loop is activated!**");
-            channel.send({ embeds: [loopEmbed] });
-        }
+    
+        module.exports = { initializePlayer, setLoop, clearQueue, showQueue };
     }
+    
+    module.exports = { initializePlayer };
+    
 
-    function disableLoop(player, channel) {
-        player.setLoop("none");
-        const loopEmbed = new EmbedBuilder()
-            .setColor(config.embedColor)
-            .setTitle("❌ **Loop is disabled!**");
-        channel.send({ embeds: [loopEmbed] });
-    }
-
-    function setLoop(player, loopType) {
-        if (loopType === "track") {
-            player.setLoop("track");
-        } else if (loopType === "queue") {
-            player.setLoop("queue");
-        } else {
-            player.setLoop("none");
-        }
-    }
-
-    function clearQueue(player) {
-        player.queue.clear();
-        queueNames.length = 0;
-    }
-
-    function showQueue(channel, queue) {
-        const queueList = queue.map((track, index) => `${index + 1}. ${track.info.title}`).join('\n');
-        const queueEmbed = new EmbedBuilder()
-            .setColor(config.embedColor)
-            .setTitle("Queue")
-            .setDescription(queueList);
-        channel.send({ embeds: [queueEmbed] });
-    }
-
-    module.exports = { initializePlayer, setLoop, clearQueue, showQueue };
-}
-
-module.exports = { initializePlayer };
