@@ -1,14 +1,17 @@
 const { Riffy } = require("riffy");
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
-const { queueNames } = require("./commands/play");
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,AttachmentBuilder } = require("discord.js");
+const { queueNames,requesters  } = require("./commands/play");
+const { mewcard } = require("mewcard");
+const config = require("./config.js");
+
 
 function initializePlayer(client) {
     const nodes = [
         {
-            host: "lava-v3.ajieblogs.eu.org",
-            port: 443,
-            password: "https://dsc.gg/ajidevserver",
-            secure: true
+            host: "37.114.42.191",
+            port: 6767,
+            password: "danteisnttaken",
+            secure: false
         },
     ];
 
@@ -34,20 +37,20 @@ function initializePlayer(client) {
 
     client.riffy.on("trackStart", async (player, track) => {
         const channel = client.channels.cache.get(player.textChannel);
+        const trackUri = track.info.uri
+        const requester = requesters.get(trackUri); 
+        const streamProvider = track.info.sourceName.charAt(0).toUpperCase() + track.info.sourceName.slice(1);
+ 
+    const card = new mewcard()
+        .setName(track.info.title)
+        .setAuthor(track.info.author)
+        .setTheme(config.musicardTheme)
+        .setBrightness(50)
+        .setThumbnail(track.info.thumbnail)
+        .setRequester(`${requester}`)
 
-        const embed = new EmbedBuilder()
-            .setColor("#0099ff")
-            .setAuthor({
-                name: 'Now Playing',
-                iconURL: 'https://cdn.discordapp.com/attachments/1230824451990622299/1236664581364125787/music-play.gif?ex=6638d524&is=663783a4&hm=5179f7d8fcd18edc1f7d0291bea486b1f9ce69f19df8a96303b75505e18baa3a&',
-                url: 'https://discord.gg/xQF9f9yUEM'
-            })
-            .setDescription(`➡️ **Song Name:** [${track.info.title}](${track.info.uri})\n➡️ **Author:** ${track.info.author}\n➡️ **Platforms :** YouTube, Spotify, SoundCloud`)
-            .setImage(`https://cdn.discordapp.com/attachments/1004341381784944703/1165201249331855380/RainbowLine.gif?ex=663939fa&is=6637e87a&hm=e02431de164b901e07b55d8f8898ca5b1b2832ad11985cecc3aa229a7598d610&`)
-            .setThumbnail(track.info.thumbnail)
-            .setTimestamp()
-            .setFooter({ text: 'Click below buttons to control playback!' });
-
+    const buffer = await card.build();
+    const attachment = new AttachmentBuilder(buffer, { name: `musicard.png` });
 
         const queueLoopButton = new ButtonBuilder()
             .setCustomId("loopQueue")
@@ -78,7 +81,7 @@ function initializePlayer(client) {
             .addComponents(queueLoopButton, disableLoopButton, showQueueButton, clearQueueButton, skipButton);
 
 
-        const message = await channel.send({ embeds: [embed], components: [actionRow] });
+        const message = await channel.send({files: [attachment], components: [actionRow] });
 
 
         const filter = i => i.customId === 'loopQueue' || i.customId === 'skipTrack' || i.customId === 'disableLoop' || i.customId === 'showQueue' || i.customId === 'clearQueue';
@@ -107,7 +110,7 @@ function initializePlayer(client) {
                         iconURL: 'https://cdn.discordapp.com/attachments/1156866389819281418/1157318080670728283/7905-repeat.gif?ex=66383bb4&is=6636ea34&hm=65f37cf88245f1c09285b547fda57b82828b3bbcda855e184f446d6ff43756b3&',
                         url: 'https://discord.gg/xQF9f9yUEM'
                     })
-                    .setColor("#00FF00")
+                    .setColor(config.embedColor)
                     .setTitle("**Queue loop is Activated!**")
 
 
@@ -115,7 +118,7 @@ function initializePlayer(client) {
             } else if (i.customId === 'skipTrack') {
                 player.stop();
                 const skipEmbed = new EmbedBuilder()
-                    .setColor('#3498db')
+                    .setColor(config.embedColor)
                     .setAuthor({
                         name: 'Song Skipped',
                         iconURL: 'https://cdn.discordapp.com/attachments/1156866389819281418/1157269773118357604/giphy.gif?ex=6517fef6&is=6516ad76&hm=f106480f7d017a07f75d543cf545bbea01e9cf53ebd42020bd3b90a14004398e&',
@@ -129,7 +132,7 @@ function initializePlayer(client) {
             } else if (i.customId === 'disableLoop') {
                 setLoop(player, 'none');
                 const loopEmbed = new EmbedBuilder()
-                    .setColor("#0099ff")
+                    .setColor(config.embedColor)
                     .setAuthor({
                         name: 'Looping Off',
                         iconURL: 'https://cdn.discordapp.com/attachments/1230824451990622299/1230836684774576168/7762-verified-blue.gif?ex=6638b97d&is=663767fd&hm=021725868cbbc66f35d2b980585489f93e9fd366aa57640732dc49e7da9a80ee&',
@@ -158,7 +161,7 @@ function initializePlayer(client) {
                         const numberedSongs = pages[i].map((song, index) => `${index + 1}. ${song}`).join('\n');
     
                         const queueEmbed = new EmbedBuilder()
-                            .setColor("#0099ff")
+                            .setColor(config.embedColor)
                             .setTitle(`Current Queue (Page ${i + 1}/${pages.length})`)
                             .setDescription(numberedSongs);
     
@@ -168,7 +171,7 @@ function initializePlayer(client) {
                 } else if (i.customId === 'clearQueue') {
                     clearQueue(player);
                     const queueEmbed = new EmbedBuilder()
-                        .setColor("#0099ff")
+                        .setColor(config.embedColor)
                         .setAuthor({
                             name: 'Queue Cleared',
                             iconURL: 'https://cdn.discordapp.com/attachments/1230824451990622299/1230836684774576168/7762-verified-blue.gif?ex=6638b97d&is=663767fd&hm=021725868cbbc66f35d2b980585489f93e9fd366aa57640732dc49e7da9a80ee&',
@@ -195,7 +198,7 @@ function initializePlayer(client) {
             } else {
                 player.destroy();
                 const queueEmbed = new EmbedBuilder()
-                    .setColor("#0099ff")
+                    .setColor(config.embedColor)
                     .setDescription('**Queue Songs ended! Disconnecting Bot!**');
     
     
@@ -222,7 +225,7 @@ function initializePlayer(client) {
         function showQueue(channel, queue) {
             const queueList = queue.map((track, index) => `${index + 1}. ${track.info.title}`).join('\n');
             const queueEmbed = new EmbedBuilder()
-                .setColor("#0099ff")
+                .setColor(config.embedColor)
                 .setTitle("Queue")
                 .setDescription(queueList);
             channel.send({ embeds: [queueEmbed] });
