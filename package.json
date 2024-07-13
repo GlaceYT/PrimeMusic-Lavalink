@@ -1,5 +1,5 @@
 {
-  "name": "Prime Music",
+  "name": "prime-music",
   "version": "1.0",
   "description": "Music Bot",
   "main": "index.js",
@@ -8,7 +8,10 @@
     "dotenv": "^16.4.5",
     "erela.js": "^2.4.0",
     "express": "^4.19.2",
-    "riffy": "^1.0.3"
+    "mewcard": "^1.7.4",
+    "node-fetch": "^2.7.0",
+    "riffy": "^1.0.3",
+    "songcard": "^1.2.13"
   },
   "scripts": {
     "start": "node index.js"

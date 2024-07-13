@@ -1,17 +1,19 @@
 const { Riffy } = require("riffy");
-const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,AttachmentBuilder } = require("discord.js");
-const { queueNames,requesters  } = require("./commands/play");
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } = require("discord.js");
+const { queueNames, requesters } = require("./commands/play");
 const { mewcard } = require("mewcard");
 const config = require("./config.js");
-
 
 function initializePlayer(client) {
     const nodes = [
         {
-            host: "lava-v3.ajieblogs.eu.org",
-            port: 443,
-            password: "https://dsc.gg/ajidevserver",
-            secure: true
+            host: "37.114.42.191",
+            port: 6767,
+            password: "danteisnttaken",
+            reconnectTimeout: 5000,
+            reconnectTries: Infinity,
+            secure: false
+
         },
     ];
 
@@ -37,202 +39,285 @@ function initializePlayer(client) {
 
     client.riffy.on("trackStart", async (player, track) => {
         const channel = client.channels.cache.get(player.textChannel);
-        const trackUri = track.info.uri
-        const requester = requesters.get(trackUri); 
+        const trackUri = track.info.uri;
+        const requester = requesters.get(trackUri);
         const streamProvider = track.info.sourceName.charAt(0).toUpperCase() + track.info.sourceName.slice(1);
- 
-    const card = new mewcard()
-        .setName(track.info.title)
-        .setAuthor(track.info.author)
-        .setTheme(config.musicardTheme)
-        .setBrightness(50)
-        .setThumbnail(track.info.thumbnail)
-        .setRequester(`${requester}`)
 
-    const buffer = await card.build();
-    const attachment = new AttachmentBuilder(buffer, { name: `musicard.png` });
+        const card = new mewcard()
+            .setName(track.info.title)
+            .setAuthor(track.info.author)
+            .setTheme(config.musicardTheme)
+            .setBrightness(50)
+            .setThumbnail(track.info.thumbnail)
+            .setRequester(`${requester}`);
 
-        const queueLoopButton = new ButtonBuilder()
-            .setCustomId("loopQueue")
-            .setLabel("Loop Queue")
-            .setStyle(ButtonStyle.Primary);
+        const buffer = await card.build();
+        const attachment = new AttachmentBuilder(buffer, { name: `musicard.png` });
+
+        const embed = new EmbedBuilder()
+            .setAuthor({
+               name: 'Now Playing',
+               iconURL: config.MusicIcon
+             })
+            .setDescription('🎶 **Controls:**\n 🔁 `Loop`, ❌ `Disable`, ⏭️ `Skip`, 📜 `Queue`, 🗑️ `Clear`\n ⏹️ `Stop`, ⏸️ `Pause`, ▶️ `Resume`, 🔊 `Vol Up`, 🔉 `Vol Down`')
+            .setImage('attachment://musicard.png')
+            .setColor(config.embedColor);
+
+        const loopButton = new ButtonBuilder()
+            .setCustomId("loopToggle")
+            .setEmoji('🔁')
+            .setStyle(ButtonStyle.Secondary);
 
         const disableLoopButton = new ButtonBuilder()
             .setCustomId("disableLoop")
-            .setLabel("Disable Loop")
-            .setStyle(ButtonStyle.Primary);
+            .setEmoji('❌')
+            .setStyle(ButtonStyle.Secondary);
 
         const skipButton = new ButtonBuilder()
             .setCustomId("skipTrack")
-            .setLabel("Skip")
-            .setStyle(ButtonStyle.Success);
+            .setEmoji('⏭️')
+            .setStyle(ButtonStyle.Secondary);
 
         const showQueueButton = new ButtonBuilder()
             .setCustomId("showQueue")
-            .setLabel("Show Queue")
-            .setStyle(ButtonStyle.Primary);
+            .setEmoji('📜')
+            .setStyle(ButtonStyle.Secondary);
+
         const clearQueueButton = new ButtonBuilder()
             .setCustomId("clearQueue")
-            .setLabel("Clear Queue")
+            .setEmoji('🗑️')
+            .setStyle(ButtonStyle.Secondary);
+
+        const stopButton = new ButtonBuilder()
+            .setCustomId("stopTrack")
+            .setEmoji('⏹️')
             .setStyle(ButtonStyle.Danger);
 
+        const pauseButton = new ButtonBuilder()
+            .setCustomId("pauseTrack")
+            .setEmoji('⏸️')
+            .setStyle(ButtonStyle.Secondary);
 
-        const actionRow = new ActionRowBuilder()
-            .addComponents(queueLoopButton, disableLoopButton, showQueueButton, clearQueueButton, skipButton);
+        const resumeButton = new ButtonBuilder()
+            .setCustomId("resumeTrack")
+            .setEmoji('▶️')
+            .setStyle(ButtonStyle.Secondary);
 
+        const volumeUpButton = new ButtonBuilder()
+            .setCustomId("volumeUp")
+            .setEmoji('🔊')
+            .setStyle(ButtonStyle.Secondary);
 
-        const message = await channel.send({files: [attachment], components: [actionRow] });
+        const volumeDownButton = new ButtonBuilder()
+            .setCustomId("volumeDown")
+            .setEmoji('🔉')
+            .setStyle(ButtonStyle.Secondary);
 
+        const actionRow1 = new ActionRowBuilder()
+            .addComponents(loopButton, disableLoopButton, skipButton, showQueueButton, clearQueueButton);
 
-        const filter = i => i.customId === 'loopQueue' || i.customId === 'skipTrack' || i.customId === 'disableLoop' || i.customId === 'showQueue' || i.customId === 'clearQueue';
+        const actionRow2 = new ActionRowBuilder()
+            .addComponents(stopButton, pauseButton, resumeButton, volumeUpButton, volumeDownButton);
+
+        const message = await channel.send({ embeds: [embed], files: [attachment], components: [actionRow1, actionRow2] });
+
+        const filter = i => [
+            'loopToggle', 'skipTrack', 'disableLoop', 'showQueue', 'clearQueue',
+            'stopTrack', 'pauseTrack', 'resumeTrack', 'volumeUp', 'volumeDown'
+        ].includes(i.customId);
+
         const collector = message.createMessageComponentCollector({ filter, time: 180000 });
+
         setTimeout(() => {
-            const disabledRow = new ActionRowBuilder()
+            const disabledRow1 = new ActionRowBuilder()
                 .addComponents(
-                    queueLoopButton.setDisabled(true),
+                    loopButton.setDisabled(true),
                     disableLoopButton.setDisabled(true),
                     skipButton.setDisabled(true),
                     showQueueButton.setDisabled(true),
                     clearQueueButton.setDisabled(true)
                 );
 
+            const disabledRow2 = new ActionRowBuilder()
+                .addComponents(
+                    stopButton.setDisabled(true),
+                    pauseButton.setDisabled(true),
+                    resumeButton.setDisabled(true),
+                    volumeUpButton.setDisabled(true),
+                    volumeDownButton.setDisabled(true)
+                );
 
-            message.edit({ components: [disabledRow] })
+            message.edit({ components: [disabledRow1, disabledRow2] })
                 .catch(console.error);
         }, 180000);
+
         collector.on('collect', async i => {
             await i.deferUpdate();
-            if (i.customId === 'loopQueue') {
-                setLoop(player, 'queue');
-                const loopEmbed = new EmbedBuilder()
-                    .setAuthor({
-                        name: 'Queue Loop!',
-                        iconURL: 'https://cdn.discordapp.com/attachments/1156866389819281418/1157318080670728283/7905-repeat.gif?ex=66383bb4&is=6636ea34&hm=65f37cf88245f1c09285b547fda57b82828b3bbcda855e184f446d6ff43756b3&',
-                        url: 'https://discord.gg/xQF9f9yUEM'
-                    })
-                    .setColor(config.embedColor)
-                    .setTitle("**Queue loop is Activated!**")
-
-
-                await channel.send({ embeds: [loopEmbed] });
+            if (i.customId === 'loopToggle') {
+                toggleLoop(player, channel);
             } else if (i.customId === 'skipTrack') {
                 player.stop();
                 const skipEmbed = new EmbedBuilder()
                     .setColor(config.embedColor)
-                    .setAuthor({
-                        name: 'Song Skipped',
-                        iconURL: 'https://cdn.discordapp.com/attachments/1156866389819281418/1157269773118357604/giphy.gif?ex=6517fef6&is=6516ad76&hm=f106480f7d017a07f75d543cf545bbea01e9cf53ebd42020bd3b90a14004398e&',
-                        url: 'https://discord.gg/FUEHs7RCqz'
-                    })
-                    .setTitle("**Player will play the next song!**")
+                    .setTitle("⏭️ **Player will play the next song!**")
                     .setTimestamp();
-
 
                 await channel.send({ embeds: [skipEmbed] });
             } else if (i.customId === 'disableLoop') {
-                setLoop(player, 'none');
-                const loopEmbed = new EmbedBuilder()
-                    .setColor(config.embedColor)
-                    .setAuthor({
-                        name: 'Looping Off',
-                        iconURL: 'https://cdn.discordapp.com/attachments/1230824451990622299/1230836684774576168/7762-verified-blue.gif?ex=6638b97d&is=663767fd&hm=021725868cbbc66f35d2b980585489f93e9fd366aa57640732dc49e7da9a80ee&',
-                        url: 'https://discord.gg/xQF9f9yUEM'
-                    })
-                    .setDescription('**Loop is Disabled for queue and single Song!**');
-                    
+                disableLoop(player, channel);
+            } else if (i.customId === 'showQueue') {
+                const pageSize = 10;
 
-                    await channel.send({ embeds: [loopEmbed] });
-                } else if (i.customId === 'showQueue') {
-    
-                    const pageSize = 10;
-    
-                    const queueMessage = queueNames.length > 0 ?
-                        queueNames.map((song, index) => `${index + 1}. ${song}`).join('\n') :
-                        "The queue is empty.";
-    
-    
-                    const pages = [];
-                    for (let i = 0; i < queueNames.length; i += pageSize) {
-                        const page = queueNames.slice(i, i + pageSize);
-                        pages.push(page);
-                    }
-    
-                    for (let i = 0; i < pages.length; i++) {
-                        const numberedSongs = pages[i].map((song, index) => `${index + 1}. ${song}`).join('\n');
-    
-                        const queueEmbed = new EmbedBuilder()
-                            .setColor(config.embedColor)
-                            .setTitle(`Current Queue (Page ${i + 1}/${pages.length})`)
-                            .setDescription(numberedSongs);
-    
-                        await channel.send({ embeds: [queueEmbed] });
-                    }
-    
-                } else if (i.customId === 'clearQueue') {
-                    clearQueue(player);
+                const queueMessage = queueNames.length > 0 ?
+                    queueNames.map((song, index) => `${index + 1}. ${song}`).join('\n') :
+                    "The queue is empty.";
+
+                const pages = [];
+                for (let i = 0; i < queueNames.length; i += pageSize) {
+                    const page = queueNames.slice(i, i + pageSize);
+                    pages.push(page);
+                }
+
+                for (let i = 0; i < pages.length; i++) {
+                    const numberedSongs = pages[i].map((song, index) => `${index + 1}. ${song}`).join('\n');
+
                     const queueEmbed = new EmbedBuilder()
                         .setColor(config.embedColor)
-                        .setAuthor({
-                            name: 'Queue Cleared',
-                            iconURL: 'https://cdn.discordapp.com/attachments/1230824451990622299/1230836684774576168/7762-verified-blue.gif?ex=6638b97d&is=663767fd&hm=021725868cbbc66f35d2b980585489f93e9fd366aa57640732dc49e7da9a80ee&',
-                            url: 'https://discord.gg/xQF9f9yUEM'
-                        })
-                        .setDescription('**Queue Songs cleared successfully!**');
-    
-    
+                        .setTitle(`📜 **Current Queue (Page ${i + 1}/${pages.length})**`)
+                        .setDescription(numberedSongs);
+
                     await channel.send({ embeds: [queueEmbed] });
                 }
-            });
-    
-            collector.on('end', collected => {
-                console.log(`Collected ${collected.size} interactions.`);
-            });
-        });
-    
-        client.riffy.on("queueEnd", async (player) => {
-            const channel = client.channels.cache.get(player.textChannel);
-            const autoplay = false;
-    
-            if (autoplay) {
-                player.autoplay(player);
-            } else {
+            } else if (i.customId === 'clearQueue') {
+                clearQueue(player);
+                disableLoop(player, channel);
+            } else if (i.customId === 'stopTrack') {
+                player.stop();
                 player.destroy();
-                const queueEmbed = new EmbedBuilder()
+                const stopEmbed = new EmbedBuilder()
                     .setColor(config.embedColor)
-                    .setDescription('**Queue Songs ended! Disconnecting Bot!**');
-    
-    
-                await channel.send({ embeds: [queueEmbed] });
+                    .setDescription('⏹️ **Playback has been stopped and player destroyed!**');
+
+                await channel.send({ embeds: [stopEmbed] });
+            } else if (i.customId === 'pauseTrack') {
+                player.pause(true);
+                const pauseEmbed = new EmbedBuilder()
+                    .setColor(config.embedColor)
+                    .setDescription('⏸️ **Playback has been paused!**');
+
+                await channel.send({ embeds: [pauseEmbed] });
+            } else if (i.customId === 'resumeTrack') {
+                player.pause(false);
+                const resumeEmbed = new EmbedBuilder()
+                    .setColor(config.embedColor)
+                    .setDescription('▶️ **Playback has been resumed!**');
+
+                await channel.send({ embeds: [resumeEmbed] });
+            } else if (i.customId === 'volumeUp') {
+                if (player.volume < 100) {
+                    const oldVolume = player.volume;
+                    player.setVolume(Math.min(player.volume + 10, 100));
+                    const volumeUpEmbed = new EmbedBuilder()
+                        .setColor(config.embedColor)
+                        .setDescription(`🔊 **Volume increased by ${player.volume - oldVolume}% to ${player.volume}!**`);
+
+                    await channel.send({ embeds: [volumeUpEmbed] });
+                } else {
+                    const maxVolumeEmbed = new EmbedBuilder()
+                        .setColor(config.embedColor)
+                        .setDescription('🔊 **Volume is already at maximum!**');
+
+                    await channel.send({ embeds: [maxVolumeEmbed] });
+                }
+            } else if (i.customId === 'volumeDown') {
+                if (player.volume > 10) {
+                    const oldVolume = player.volume;
+                    player.setVolume(Math.max(player.volume - 10, 10));
+                    const volumeDownEmbed = new EmbedBuilder()
+                        .setColor(config.embedColor)
+                        .setDescription(`🔉 **Volume decreased by ${oldVolume - player.volume}% to ${player.volume}!**`);
+
+                    await channel.send({ embeds: [volumeDownEmbed] });
+                } else {
+                    const minVolumeEmbed = new EmbedBuilder()
+                        .setColor(config.embedColor)
+                        .setDescription('🔉 **Volume is already at minimum!**');
+
+                    await channel.send({ embeds: [minVolumeEmbed] });
+                }
             }
         });
-    
-    
-        function setLoop(player, loopType) {
-            if (loopType === "queue") {
-                player.setLoop("queue");
-            } else {
-                player.setLoop("none");
-            }
-        }
-    
-    
-        function clearQueue(player) {
-            player.queue.clear();
-            queueNames.length = 0;
-        }
-    
-    
-        function showQueue(channel, queue) {
-            const queueList = queue.map((track, index) => `${index + 1}. ${track.info.title}`).join('\n');
+
+        collector.on('end', collected => {
+            console.log(`Collected ${collected.size} interactions.`);
+        });
+    });
+
+    client.riffy.on("queueEnd", async (player) => {
+        const channel = client.channels.cache.get(player.textChannel);
+        const autoplay = false;
+
+        if (autoplay) {
+            player.autoplay(player);
+        } else {
+            player.destroy();
             const queueEmbed = new EmbedBuilder()
                 .setColor(config.embedColor)
-                .setTitle("Queue")
-                .setDescription(queueList);
-            channel.send({ embeds: [queueEmbed] });
+                .setDescription('**Queue Songs ended! Disconnecting Bot!**');
+
+            await channel.send({ embeds: [queueEmbed] });
         }
-    
-        module.exports = { initializePlayer, setLoop, clearQueue, showQueue };
+    });
+
+    function toggleLoop(player, channel) {
+        if (player.loop === "track") {
+            player.setLoop("queue");
+            const loopEmbed = new EmbedBuilder()
+                .setColor(config.embedColor)
+                .setTitle("🔁 **Queue loop is activated!**");
+            channel.send({ embeds: [loopEmbed] });
+        } else {
+            player.setLoop("track");
+            const loopEmbed = new EmbedBuilder()
+                .setColor(config.embedColor)
+                .setTitle("🔁 **Track loop is activated!**");
+            channel.send({ embeds: [loopEmbed] });
+        }
     }
-    
-    module.exports = { initializePlayer };
-    
+
+    function disableLoop(player, channel) {
+        player.setLoop("none");
+        const loopEmbed = new EmbedBuilder()
+            .setColor(config.embedColor)
+            .setTitle("❌ **Loop is disabled!**");
+        channel.send({ embeds: [loopEmbed] });
+    }
+
+    function setLoop(player, loopType) {
+        if (loopType === "track") {
+            player.setLoop("track");
+        } else if (loopType === "queue") {
+            player.setLoop("queue");
+        } else {
+            player.setLoop("none");
+        }
+    }
+
+    function clearQueue(player) {
+        player.queue.clear();
+        queueNames.length = 0;
+    }
+
+    function showQueue(channel, queue) {
+        const queueList = queue.map((track, index) => `${index + 1}. ${track.info.title}`).join('\n');
+        const queueEmbed = new EmbedBuilder()
+            .setColor(config.embedColor)
+            .setTitle("Queue")
+            .setDescription(queueList);
+        channel.send({ embeds: [queueEmbed] });
+    }
+
+    module.exports = { initializePlayer, setLoop, clearQueue, showQueue };
+}
+
+module.exports = { initializePlayer };
