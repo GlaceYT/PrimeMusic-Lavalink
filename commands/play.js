@@ -19,8 +19,10 @@
 
 */
 const { ApplicationCommandOptionType, EmbedBuilder } = require('discord.js');
+const config = require("../config.js");
 
 const queueNames = [];
+const requesters = new Map(); 
 
 async function play(client, interaction) {
     try {
@@ -35,11 +37,10 @@ async function play(client, interaction) {
 
         await interaction.deferReply();
 
-        // Try resolving the query and log the entire response for debugging
-        const resolve = await client.riffy.resolve({ query: query, requester: interaction.user });
+        
+        const resolve = await client.riffy.resolve({ query: query, requester: interaction.user.username });
         console.log('Resolve response:', resolve);
 
-        // Ensure the response structure is as expected
         if (!resolve || typeof resolve !== 'object') {
             throw new TypeError('Resolve response is not an object');
         }
@@ -53,24 +54,26 @@ async function play(client, interaction) {
 
         if (loadType === 'PLAYLIST_LOADED') {
             for (const track of tracks) {
-                track.info.requester = interaction.user;
+                track.info.requester = interaction.user.username; 
                 player.queue.add(track);
                 queueNames.push(track.info.title);
+                requesters.set(track.info.uri, interaction.user.username); 
             }
 
             if (!player.playing && !player.paused) player.play();
 
         } else if (loadType === 'SEARCH_RESULT' || loadType === 'TRACK_LOADED') {
             const track = tracks.shift();
-            track.info.requester = interaction.user;
+            track.info.requester = interaction.user.username; 
 
             player.queue.add(track);
             queueNames.push(track.info.title);
+            requesters.set(track.info.uri, interaction.user.username); 
 
             if (!player.playing && !player.paused) player.play();
         } else {
             const errorEmbed = new EmbedBuilder()
-                .setColor('#ff0000')
+                .setColor(config.embedColor)
                 .setTitle('Error')
                 .setDescription('There are no results found.');
 
@@ -82,7 +85,7 @@ async function play(client, interaction) {
 
         const embeds = [
             new EmbedBuilder()
-                .setColor('#4d9fd6')
+                .setColor(config.embedColor)
                 .setAuthor({
                     name: 'Request Update!',
                     iconURL: 'https://cdn.discordapp.com/attachments/1230824451990622299/1236794583732457473/7828-verify-ak.gif',
@@ -91,7 +94,7 @@ async function play(client, interaction) {
                 .setDescription('➡️ **Your request has been successfully processed.**\n➡️** Please use the buttons to control the queue**'),
 
             new EmbedBuilder()
-                .setColor('#ffea00')
+                .setColor(config.embedColor)
                 .setAuthor({
                     name: 'Request Update!',
                     iconURL: 'https://cdn.discordapp.com/attachments/1230824451990622299/1236802032938127470/4104-verify-yellow.gif',
@@ -100,7 +103,7 @@ async function play(client, interaction) {
                 .setDescription('➡️ **Your request has been successfully processed.**\n➡️** Please use the buttons to control the queue**'),
 
             new EmbedBuilder()
-                .setColor('#FF0000')
+                .setColor(config.embedColor)
                 .setAuthor({
                     name: 'Request Update!',
                     iconURL: 'https://cdn.discordapp.com/attachments/1230824451990622299/1236802049190920202/4104-verify-red.gif',
@@ -134,7 +137,8 @@ module.exports = {
         required: true
     }],
     run: play,
-    queueNames: queueNames
+    queueNames: queueNames,
+    requesters: requesters 
 };
 
 

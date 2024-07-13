@@ -23,10 +23,11 @@
 
 module.exports = {
   TOKEN: "",
-  ownerID: ["1004206704994566164", ""], 
+  ownerID: ["597000696843206685", ""], 
   setupFilePath: './commands/setup.json',
   commandsDir: './commands',  
-  embedColor: "00fbff",
+  embedColor: "#1db954",
+  musicardTheme:"themes16", //Goes from themes1 to themes19
   errorLog: "", 
 
 }
