@@ -28,6 +28,16 @@ async function play(client, interaction) {
     try {
         const query = interaction.options.getString('name');
 
+        if (!interaction.member.voice.channelId) {
+            const embed = new EmbedBuilder()
+                .setColor('#ff0000')
+                .setTitle('Voice Channel Required')
+                .setDescription('❌ You need to be in a voice channel to use this command.');
+
+            await interaction.reply({ embeds: [embed], ephemeral: true });
+            return;
+        }
+
         const player = client.riffy.createConnection({
             guildId: interaction.guildId,
             voiceChannel: interaction.member.voice.channelId,
@@ -55,7 +65,7 @@ async function play(client, interaction) {
             for (const track of tracks) {
                 track.info.requester = interaction.user.username; 
                 player.queue.add(track);
-                queueNames.push(track.info.title);
+                queueNames.push(`[${track.info.title} - ${track.info.author}](${track.info.uri})`);
                 requesters.set(track.info.uri, interaction.user.username); 
             }
 
@@ -66,7 +76,7 @@ async function play(client, interaction) {
             track.info.requester = interaction.user.username; 
 
             player.queue.add(track);
-            queueNames.push(track.info.title);
+            queueNames.push(`[${track.info.title} - ${track.info.author}](${track.info.uri})`);
             requesters.set(track.info.uri, interaction.user.username); 
 
             if (!player.playing && !player.paused) player.play();
