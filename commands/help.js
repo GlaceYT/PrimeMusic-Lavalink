@@ -43,9 +43,11 @@ Your ultimate music companion on Discord. Here are the available commands:
 [ /lyrics  ] - Displays the lyrics of a song.
 [ /skip    ] - Skip the current song.
 [ /stop    ] - Destroys the music player.
+[ /np      ] - Shows now playing song.
 [ /volume  ] - Sets the volume of the player.
 [ /ping    ] - Check bot latency.
-[ /support ] - Display support server info.
+[ /support ] - Shows support server info.
+[ /help    ] - Display this help menu.
 \`\`\`
       `;
 
@@ -55,7 +57,7 @@ Your ultimate music companion on Discord. Here are the available commands:
         .setThumbnail(client.user.displayAvatarURL()) 
         .setDescription(helpDescription)
         .setFooter({ text: `Prime Music v1.0`, iconURL: client.user.displayAvatarURL() }) 
-        .setTimestamp();
+      
 
       return interaction.reply({ embeds: [embed] });
     } catch (e) {
