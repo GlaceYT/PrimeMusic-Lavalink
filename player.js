@@ -7,12 +7,12 @@ const config = require("./config.js");
 function initializePlayer(client) {
     const nodes = [
         {
-            host: "37.114.42.191",
-            port: 6767,
-            password: "danteisnttaken",
+            host: "lava-v3.ajieblogs.eu.org",
+            port: 443,
+            password: "lava-v3.ajieblogs.eu.org",
             reconnectTimeout: 5000,
             reconnectTries: Infinity,
-            secure: false
+            secure: true
 
         },
     ];
