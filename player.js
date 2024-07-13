@@ -17,7 +17,7 @@ function initializePlayer(client) {
         },
     ];
 
-      client.riffy = new Riffy(client, nodes, {
+client.riffy = new Riffy(client, nodes, {
         send: (payload) => {
             const guildId = payload.d.guild_id;
             if (!guildId) return;
@@ -230,97 +230,82 @@ function initializePlayer(client) {
                         .setColor(config.embedColor)
                         .setDescription(`🔉 **Volume decreased by ${oldVolume - player.volume}% to ${player.volume}!**`);
 
-                        await channel.send({ embeds: [volumeDownEmbed] });
-                    } else {
-                        const minVolumeEmbed = new EmbedBuilder()
-                            .setColor(config.embedColor)
-                            .setDescription('🔉 **Volume is already at minimum!**');
-    
-                        await channel.send({ embeds: [minVolumeEmbed] });
-                    }
-                }
-            });
-    
-            collector.on('end', collected => {
-                console.log(`Collected ${collected.size} interactions.`);
-            });
-        });
-    
-        client.riffy.on("queueEnd", async (player) => {
-            const channel = client.channels.cache.get(player.textChannel);
-            const autoplay = false;
-    
-            if (autoplay) {
-                player.autoplay(player);
-            } else {
-                player.destroy();
-                const queueEmbed = new EmbedBuilder()
-                    .setColor(config.embedColor)
-                    .setDescription('**Queue Songs ended! Disconnecting Bot!**');
-    
-                await channel.send({ embeds: [queueEmbed] });
-            }
-        });
-    
-        function toggleLoop(player, channel) {
-            if (player.loop === "track") {
-                player.setLoop("queue");
-                const loopEmbed = new EmbedBuilder()
-                    .setColor(config.embedColor)
-                    .setTitle("🔁 **Queue loop is activated!**");
-                channel.send({ embeds: [loopEmbed] });
-            } else {
-                player.setLoop("track");
-                const loopEmbed = new EmbedBuilder()
-                    .setColor(config.embedColor)
-                    .setTitle("🔁 **Track loop is activated!**");
-                channel.send({ embeds: [loopEmbed] });
-            }
-        }
-    
-        function disableLoop(player, channel) {
-            player.setLoop("none");
-            const loopEmbed = new EmbedBuilder()
-                .setColor(config.embedColor)
-                .setTitle("❌ **Loop is disabled!**");
-            channel.send({ embeds: [loopEmbed] });
-        }
-    
-        function setLoop(player, loopType) {
-            if (loopType === "track") {
-                player.setLoop("track");
-            } else if (loopType === "queue") {
-                player.setLoop("queue");
-            } else {
-                player.setLoop("none");
-            }
-        }
-    
-        function clearQueue(player) {
-            player.queue.clear();
-            queueNames.length = 0;
-        }
-    
-        function showQueue(channel, queue) {
-            const queueList = queue.map((track, index) => {
-                if (index === 0) {
-                    return `🎵 **Now Playing:**\n${track.info.title} - ${track.info.author}\n`;
+                    await channel.send({ embeds: [volumeDownEmbed] });
                 } else {
-                    return `${index}. ${track.info.title} - ${track.info.author}`;
+                    const minVolumeEmbed = new EmbedBuilder()
+                        .setColor(config.embedColor)
+                        .setDescription('🔉 **Volume is already at minimum!**');
+
+                    await channel.send({ embeds: [minVolumeEmbed] });
                 }
-            }).join('\n');
-    
+            }
+        });
+
+        collector.on('end', collected => {
+            console.log(`Collected ${collected.size} interactions.`);
+        });
+    });
+
+    client.riffy.on("queueEnd", async (player) => {
+        const channel = client.channels.cache.get(player.textChannel);
+        const autoplay = false;
+
+        if (autoplay) {
+            player.autoplay(player);
+        } else {
+            player.destroy();
             const queueEmbed = new EmbedBuilder()
                 .setColor(config.embedColor)
-                .setTitle("📜 **Current Queue**")
-                .setDescription(queueList);
-    
-            channel.send({ embeds: [queueEmbed] });
+                .setDescription('**Queue Songs ended! Disconnecting Bot!**');
+
+            await channel.send({ embeds: [queueEmbed] });
         }
-    
-        module.exports = { initializePlayer, setLoop, clearQueue, showQueue };
+    });
+
+    function toggleLoop(player, channel) {
+        if (player.loop === "track") {
+            player.setLoop("queue");
+            const loopEmbed = new EmbedBuilder()
+                .setColor(config.embedColor)
+                .setTitle("🔁 **Queue loop is activated!**");
+            channel.send({ embeds: [loopEmbed] });
+        } else {
+            player.setLoop("track");
+            const loopEmbed = new EmbedBuilder()
+                .setColor(config.embedColor)
+                .setTitle("🔁 **Track loop is activated!**");
+            channel.send({ embeds: [loopEmbed] });
+        }
     }
-    
-    module.exports = { initializePlayer };
+
+    function disableLoop(player, channel) {
+        player.setLoop("none");
+        const loopEmbed = new EmbedBuilder()
+            .setColor(config.embedColor)
+            .setTitle("❌ **Loop is disabled!**");
+        channel.send({ embeds: [loopEmbed] });
+    }
+
+    function setLoop(player, loopType) {
+        if (loopType === "track") {
+            player.setLoop("track");
+        } else if (loopType === "queue") {
+            player.setLoop("queue");
+        } else {
+            player.setLoop("none");
+        }
+    }
+
+    function clearQueue(player) {
+        player.queue.clear();
+        queueNames.length = 0;
+    }
+
+  
+
+    module.exports = { initializePlayer, setLoop, clearQueue};
+}
+
+module.exports = { initializePlayer };
     
 
