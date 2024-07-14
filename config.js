@@ -36,6 +36,19 @@ module.exports = {
   embedTimeout: 5,  // Timeout before the button interaction embeds are deleted ( Default - 5 seconds)
   errorLog: "", 
 
+   // Lavalink Server Details
+
+  nodes: [
+    {
+        name: "Node #1",
+        host: "lava-v3.ajieblogs.eu.org",
+        port: 80,
+        password: "https://dsc.gg/ajidevserver",
+        reconnectTimeout: 5000,
+        reconnectTries: Infinity,
+        secure: false
+    },
+ ]
 }
 /*
 
