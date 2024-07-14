@@ -5,16 +5,16 @@ const { mewcard } = require("mewcard");
 const config = require("./config.js");
 
 function initializePlayer(client) {
-    const nodes = [
-        {
-            host: "lava-v3.ajieblogs.eu.org",
-            port: 80,
-            password: "https://dsc.gg/ajidevserver",
-            reconnectTimeout: 5000,
-            reconnectTries: Infinity,
-            secure: false
-        },
-    ];
+    const nodes = config.nodes.map(node => ({
+        name: node.name,
+        host: node.host,
+        port: node.port,
+        password: node.password,
+        secure: node.secure,
+        reconnectTimeout: 5000,
+        reconnectTries: Infinity
+        
+    }));
 
     client.riffy = new Riffy(client, nodes, {
         send: (payload) => {
