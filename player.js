@@ -8,7 +8,7 @@ function initializePlayer(client) {
     const nodes = [
         {
             host: "lava-v3.ajieblogs.eu.org",
-            port: 80, 
+            port: 80,
             password: "https://dsc.gg/ajidevserver",
             reconnectTimeout: 5000,
             reconnectTries: Infinity,
@@ -28,6 +28,8 @@ function initializePlayer(client) {
         restVersion: "v3"
     });
 
+    let currentTrackMessageId = null;
+
     client.riffy.on("nodeConnect", node => {
         console.log(`Node "${node.name}" connected.`);
     });
@@ -40,7 +42,6 @@ function initializePlayer(client) {
         const channel = client.channels.cache.get(player.textChannel);
         const trackUri = track.info.uri;
         const requester = requesters.get(trackUri);
-        const streamProvider = track.info.sourceName.charAt(0).toUpperCase() + track.info.sourceName.slice(1);
 
         const card = new mewcard()
             .setName(track.info.title)
@@ -62,94 +63,18 @@ function initializePlayer(client) {
             .setImage('attachment://musicard.png')
             .setColor(config.embedColor);
 
-        const loopButton = new ButtonBuilder()
-            .setCustomId("loopToggle")
-            .setEmoji('🔁')
-            .setStyle(ButtonStyle.Secondary);
-
-        const disableLoopButton = new ButtonBuilder()
-            .setCustomId("disableLoop")
-            .setEmoji('❌')
-            .setStyle(ButtonStyle.Secondary);
-
-        const skipButton = new ButtonBuilder()
-            .setCustomId("skipTrack")
-            .setEmoji('⏭️')
-            .setStyle(ButtonStyle.Secondary);
-
-        const showQueueButton = new ButtonBuilder()
-            .setCustomId("showQueue")
-            .setEmoji('📜')
-            .setStyle(ButtonStyle.Secondary);
-
-        const clearQueueButton = new ButtonBuilder()
-            .setCustomId("clearQueue")
-            .setEmoji('🗑️')
-            .setStyle(ButtonStyle.Secondary);
-
-        const stopButton = new ButtonBuilder()
-            .setCustomId("stopTrack")
-            .setEmoji('⏹️')
-            .setStyle(ButtonStyle.Danger);
-
-        const pauseButton = new ButtonBuilder()
-            .setCustomId("pauseTrack")
-            .setEmoji('⏸️')
-            .setStyle(ButtonStyle.Secondary);
-
-        const resumeButton = new ButtonBuilder()
-            .setCustomId("resumeTrack")
-            .setEmoji('▶️')
-            .setStyle(ButtonStyle.Secondary);
-
-        const volumeUpButton = new ButtonBuilder()
-            .setCustomId("volumeUp")
-            .setEmoji('🔊')
-            .setStyle(ButtonStyle.Secondary);
-
-        const volumeDownButton = new ButtonBuilder()
-            .setCustomId("volumeDown")
-            .setEmoji('🔉')
-            .setStyle(ButtonStyle.Secondary);
-
-        const actionRow1 = new ActionRowBuilder()
-            .addComponents(loopButton, disableLoopButton, skipButton, showQueueButton, clearQueueButton);
-
-        const actionRow2 = new ActionRowBuilder()
-            .addComponents(stopButton, pauseButton, resumeButton, volumeUpButton, volumeDownButton);
+        const actionRow1 = createActionRow1(false);
+        const actionRow2 = createActionRow2(false);
 
         const message = await channel.send({ embeds: [embed], files: [attachment], components: [actionRow1, actionRow2] });
-     
+        currentTrackMessageId = message.id;
 
         const filter = i => [
             'loopToggle', 'skipTrack', 'disableLoop', 'showQueue', 'clearQueue',
             'stopTrack', 'pauseTrack', 'resumeTrack', 'volumeUp', 'volumeDown'
         ].includes(i.customId);
 
-        const collector = message.createMessageComponentCollector({ filter, time: 180000 });
-
-        setTimeout(() => {
-            const disabledRow1 = new ActionRowBuilder()
-                .addComponents(
-                    loopButton.setDisabled(true),
-                    disableLoopButton.setDisabled(true),
-                    skipButton.setDisabled(true),
-                    showQueueButton.setDisabled(true),
-                    clearQueueButton.setDisabled(true)
-                );
-
-            const disabledRow2 = new ActionRowBuilder()
-                .addComponents(
-                    stopButton.setDisabled(true),
-                    pauseButton.setDisabled(true),
-                    resumeButton.setDisabled(true),
-                    volumeUpButton.setDisabled(true),
-                    volumeDownButton.setDisabled(true)
-                );
-
-            message.edit({ components: [disabledRow1, disabledRow2] })
-                .catch(console.error);
-        }, 180000);
+        const collector = message.createMessageComponentCollector({ filter });
 
         collector.on('collect', async i => {
             await i.deferUpdate();
@@ -287,8 +212,48 @@ function initializePlayer(client) {
         });
     });
 
+    client.riffy.on("trackEnd", async (player, track) => {
+        const channel = client.channels.cache.get(player.textChannel);
+        if (!channel || !currentTrackMessageId) return;
+
+        const message = await channel.messages.fetch(currentTrackMessageId).catch(console.error);
+        if (message) {
+            const disabledRow1 = createActionRow1(true);
+            const disabledRow2 = createActionRow2(true);
+
+            await message.edit({ components: [disabledRow1, disabledRow2] }).catch(console.error);
+        }
+
+        currentTrackMessageId = null;
+    });
+
+    client.riffy.on("playerDisconnect", async (player) => {
+        const channel = client.channels.cache.get(player.textChannel);
+        if (!channel || !currentTrackMessageId) return;
+
+        const message = await channel.messages.fetch(currentTrackMessageId).catch(console.error);
+        if (message) {
+            const disabledRow1 = createActionRow1(true);
+            const disabledRow2 = createActionRow2(true);
+
+            await message.edit({ components: [disabledRow1, disabledRow2] }).catch(console.error);
+        }
+
+        currentTrackMessageId = null;
+    });
+
     client.riffy.on("queueEnd", async (player) => {
         const channel = client.channels.cache.get(player.textChannel);
+        if (!channel || !currentTrackMessageId) return;
+
+        const message = await channel.messages.fetch(currentTrackMessageId).catch(console.error);
+        if (message) {
+            const disabledRow1 = createActionRow1(true);
+            const disabledRow2 = createActionRow2(true);
+
+            await message.edit({ components: [disabledRow1, disabledRow2] }).catch(console.error);
+        }
+
         const autoplay = false;
 
         if (autoplay) {
@@ -299,8 +264,10 @@ function initializePlayer(client) {
                 .setColor(config.embedColor)
                 .setDescription('**Queue Songs ended! Disconnecting Bot!**');
 
-            const sentMessage = await channel.send({ embeds: [queueEmbed] });
+            await channel.send({ embeds: [queueEmbed] });
         }
+
+        currentTrackMessageId = null;
     });
 
     async function toggleLoop(player, channel) {
@@ -352,6 +319,68 @@ function initializePlayer(client) {
             return `[${title} - ${author}](${uri})`;
         }
         return track;
+    }
+
+    function createActionRow1(disabled) {
+        return new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId("loopToggle")
+                    .setEmoji('🔁')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(disabled),
+                new ButtonBuilder()
+                    .setCustomId("disableLoop")
+                    .setEmoji('❌')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(disabled),
+                new ButtonBuilder()
+                    .setCustomId("skipTrack")
+                    .setEmoji('⏭️')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(disabled),
+                new ButtonBuilder()
+                    .setCustomId("showQueue")
+                    .setEmoji('📜')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(disabled),
+                new ButtonBuilder()
+                    .setCustomId("clearQueue")
+                    .setEmoji('🗑️')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(disabled)
+            );
+    }
+
+    function createActionRow2(disabled) {
+        return new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId("stopTrack")
+                    .setEmoji('⏹️')
+                    .setStyle(ButtonStyle.Danger)
+                    .setDisabled(disabled),
+                new ButtonBuilder()
+                    .setCustomId("pauseTrack")
+                    .setEmoji('⏸️')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(disabled),
+                new ButtonBuilder()
+                    .setCustomId("resumeTrack")
+                    .setEmoji('▶️')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(disabled),
+                new ButtonBuilder()
+                    .setCustomId("volumeUp")
+                    .setEmoji('🔊')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(disabled),
+                new ButtonBuilder()
+                    .setCustomId("volumeDown")
+                    .setEmoji('🔉')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setDisabled(disabled)
+            );
     }
 
     module.exports = { initializePlayer, setLoop, clearQueue, formatTrack };
