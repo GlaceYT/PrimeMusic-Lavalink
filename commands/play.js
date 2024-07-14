@@ -28,6 +28,16 @@ async function play(client, interaction) {
     try {
         const query = interaction.options.getString('name');
 
+        if (!interaction.member.voice.channelId) {
+            const embed = new EmbedBuilder()
+                .setColor('#ff0000')
+                .setTitle('Voice Channel Required')
+                .setDescription('❌ You need to be in a voice channel to use this command.');
+
+            await interaction.reply({ embeds: [embed], ephemeral: true });
+            return;
+        }
+
         const player = client.riffy.createConnection({
             guildId: interaction.guildId,
             voiceChannel: interaction.member.voice.channelId,
@@ -37,9 +47,8 @@ async function play(client, interaction) {
 
         await interaction.deferReply();
 
-        
         const resolve = await client.riffy.resolve({ query: query, requester: interaction.user.username });
-        console.log('Resolve response:', resolve);
+        //console.log('Resolve response:', resolve);
 
         if (!resolve || typeof resolve !== 'object') {
             throw new TypeError('Resolve response is not an object');
@@ -56,7 +65,7 @@ async function play(client, interaction) {
             for (const track of tracks) {
                 track.info.requester = interaction.user.username; 
                 player.queue.add(track);
-                queueNames.push(track.info.title);
+                queueNames.push(`[${track.info.title} - ${track.info.author}](${track.info.uri})`);
                 requesters.set(track.info.uri, interaction.user.username); 
             }
 
@@ -67,7 +76,7 @@ async function play(client, interaction) {
             track.info.requester = interaction.user.username; 
 
             player.queue.add(track);
-            queueNames.push(track.info.title);
+            queueNames.push(`[${track.info.title} - ${track.info.author}](${track.info.uri})`);
             requesters.set(track.info.uri, interaction.user.username); 
 
             if (!player.playing && !player.paused) player.play();
@@ -75,7 +84,7 @@ async function play(client, interaction) {
             const errorEmbed = new EmbedBuilder()
                 .setColor(config.embedColor)
                 .setTitle('Error')
-                .setDescription('There are no results found.');
+                .setDescription('❌ No results found.');
 
             await interaction.editReply({ embeds: [errorEmbed] });
             return;
@@ -87,29 +96,32 @@ async function play(client, interaction) {
             new EmbedBuilder()
                 .setColor(config.embedColor)
                 .setAuthor({
-                    name: 'Request Update!',
-                    iconURL: 'https://cdn.discordapp.com/attachments/1230824451990622299/1236794583732457473/7828-verify-ak.gif',
-                    url: 'https://discord.gg/xQF9f9yUEM'
+                    name: 'Request Update',
+                    iconURL: config.CheckmarkIcon,
+                    url: config.SupportServer
                 })
-                .setDescription('➡️ **Your request has been successfully processed.**\n➡️** Please use the buttons to control the queue**'),
+                .setDescription('**➡️ Your request has been successfully processed.**\n**➡️ Please use buttons to control playback**')
+                 .setFooter({ text: '🎶 Enjoy your music!'}),
 
             new EmbedBuilder()
                 .setColor(config.embedColor)
                 .setAuthor({
-                    name: 'Request Update!',
-                    iconURL: 'https://cdn.discordapp.com/attachments/1230824451990622299/1236802032938127470/4104-verify-yellow.gif',
-                    url: 'https://discord.gg/xQF9f9yUEM'
+                    name: 'Request Update',
+                    iconURL: config.CheckmarkIcon,
+                    url: config.SupportServer
                 })
-                .setDescription('➡️ **Your request has been successfully processed.**\n➡️** Please use the buttons to control the queue**'),
+                .setDescription('**➡️ Your request has been successfully processed.**\n**➡️ Please use buttons to control playback**')
+                 .setFooter({ text: '🎶 Enjoy your music!'}),
 
             new EmbedBuilder()
                 .setColor(config.embedColor)
                 .setAuthor({
-                    name: 'Request Update!',
-                    iconURL: 'https://cdn.discordapp.com/attachments/1230824451990622299/1236802049190920202/4104-verify-red.gif',
-                    url: 'https://discord.gg/xQF9f9yUEM'
+                    name: 'Request Update',
+                    iconURL: config.CheckmarkIcon,
+                    url: config.SupportServer
                 })
-                .setDescription('➡️ **Your request has been successfully processed.**\n➡️** Please use the buttons to control the queue**')
+                .setDescription('**➡️ Your request has been successfully processed.**\n**➡️ Please use buttons to control playback**')
+                .setFooter({ text: '🎶 Enjoy your music!'})
         ];
 
         const randomIndex = Math.floor(Math.random() * embeds.length);
@@ -120,7 +132,7 @@ async function play(client, interaction) {
         const errorEmbed = new EmbedBuilder()
             .setColor('#ff0000')
             .setTitle('Error')
-            .setDescription('An error occurred while processing your request.');
+            .setDescription('❌ An error occurred while processing your request.');
 
         await interaction.editReply({ embeds: [errorEmbed] });
     }
@@ -128,7 +140,7 @@ async function play(client, interaction) {
 
 module.exports = {
     name: "play",
-    description: "Add options too",
+    description: "Play a song from a name or link",
     permissions: "0x0000000000000800",
     options: [{
         name: 'name',
@@ -140,6 +152,7 @@ module.exports = {
     queueNames: queueNames,
     requesters: requesters 
 };
+
 
 
 /*
