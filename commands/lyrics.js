@@ -1,5 +1,4 @@
 const { ApplicationCommandOptionType, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType } = require('discord.js');
-const fetch = require('node-fetch');
 const config = require("../config.js");
 
 async function lyrics(client, interaction) {
