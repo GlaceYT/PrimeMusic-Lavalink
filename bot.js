@@ -79,7 +79,7 @@ client.on("raw", (d) => {
     client.riffy.updateVoiceState(d);
 });
 
-client.login(config.TOKEN || process.env.TOKEN).catch((e) => {
+client.login("z3em").catch((e) => {
     console.log('TOKEN ERROR❌  - Turn On Intents or Reset New Token');
 });
 
