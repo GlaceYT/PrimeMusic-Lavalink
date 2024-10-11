@@ -19,8 +19,6 @@
 
 */
 
-
-
 module.exports = {
   TOKEN: "",
   ownerID: ["1004206704994566164", ""], 
@@ -31,8 +29,8 @@ module.exports = {
   activityName: "You", // This is bot status Write Anything here 
   activityType: "WATCHING",  // Available activity types : LISTENING , PLAYING
   SupportServer: "https://discord.gg/xQF9f9yUEM",
-  CheckmarkIcon: "https://cdn.discordapp.com/attachments/1230824451990622299/1230836684774576168/7762-verified-blue.gif",
-  MusicIcon:"https://media.discordapp.net/attachments/1230824451990622299/1236664581364125787/music-play.gif",
+  CheckmarkIcon: "https://cdn.discordapp.com/emojis/819446784647757834.gif",
+  MusicIcon:"https://cdn.discordapp.com/emojis/763415718271385610.gif",
   embedTimeout: 5,  // Timeout before the button interaction embeds are deleted ( Default - 5 seconds)
   errorLog: "", 
 
@@ -40,13 +38,13 @@ module.exports = {
 
   nodes: [
     {
-        name: "Node #1",
-        host: "lavalinkv3-id.serenetia.com",
-        port: 443,
-        password: "BatuManaBisar",
+        name: "Server",
+        host: "nodev4.fypmoon.org",
+        port: 1118,
+        password: "fypmoon.org",
         reconnectTimeout: 5000,
         reconnectTries: Infinity,
-        secure: true
+        secure: false
     },
  ]
 }
