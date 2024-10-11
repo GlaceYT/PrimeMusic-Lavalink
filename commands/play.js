@@ -18,11 +18,12 @@
 
 
 */
+
 const { ApplicationCommandOptionType, EmbedBuilder } = require('discord.js');
 const config = require("../config.js");
 
 const queueNames = [];
-const requesters = new Map(); 
+const requesters = new Map();
 
 async function play(client, interaction) {
     try {
@@ -38,6 +39,18 @@ async function play(client, interaction) {
             return;
         }
 
+        // Check if Lavalink nodes are available
+        if (!client.riffy.nodes || client.riffy.nodes.size === 0) {
+            const embed = new EmbedBuilder()
+                .setColor('#ff0000')
+                .setTitle('No Lavalink Nodes')
+                .setDescription('❌ No available Lavalink nodes to process the request.');
+
+            await interaction.reply({ embeds: [embed], ephemeral: true });
+            return;
+        }
+
+        // Create the player connection
         const player = client.riffy.createConnection({
             guildId: interaction.guildId,
             voiceChannel: interaction.member.voice.channelId,
@@ -48,8 +61,6 @@ async function play(client, interaction) {
         await interaction.deferReply();
 
         const resolve = await client.riffy.resolve({ query: query, requester: interaction.user.username });
-        //console.log('Resolve response:', resolve);
-
         if (!resolve || typeof resolve !== 'object') {
             throw new TypeError('Resolve response is not an object');
         }
@@ -57,27 +68,26 @@ async function play(client, interaction) {
         const { loadType, tracks, playlistInfo } = resolve;
 
         if (!Array.isArray(tracks)) {
-            console.error('Expected tracks to be an array:', tracks);
             throw new TypeError('Expected tracks to be an array');
         }
 
-        if (loadType === 'PLAYLIST_LOADED') {
+        if (loadType === 'playlist') {
             for (const track of tracks) {
-                track.info.requester = interaction.user.username; 
+                track.info.requester = interaction.user.username;
                 player.queue.add(track);
                 queueNames.push(`[${track.info.title} - ${track.info.author}](${track.info.uri})`);
-                requesters.set(track.info.uri, interaction.user.username); 
+                requesters.set(track.info.uri, interaction.user.username);
             }
 
             if (!player.playing && !player.paused) player.play();
 
-        } else if (loadType === 'SEARCH_RESULT' || loadType === 'TRACK_LOADED') {
+        } else if (loadType === 'search' || loadType === 'track') {
             const track = tracks.shift();
-            track.info.requester = interaction.user.username; 
+            track.info.requester = interaction.user.username;
 
             player.queue.add(track);
             queueNames.push(`[${track.info.title} - ${track.info.author}](${track.info.uri})`);
-            requesters.set(track.info.uri, interaction.user.username); 
+            requesters.set(track.info.uri, interaction.user.username);
 
             if (!player.playing && !player.paused) player.play();
         } else {
@@ -90,42 +100,17 @@ async function play(client, interaction) {
             return;
         }
 
-        await new Promise(resolve => setTimeout(resolve, 500));
+        const randomEmbed = new EmbedBuilder()
+            .setColor(config.embedColor)
+            .setAuthor({
+                name: 'Request Update',
+                iconURL: config.CheckmarkIcon,
+                url: config.SupportServer
+            })
+            .setDescription('**➡️ Your request has been successfully processed.**\n**➡️ Please use buttons to control playback**')
+            .setFooter({ text: '🎶 Enjoy your music!' });
 
-        const embeds = [
-            new EmbedBuilder()
-                .setColor(config.embedColor)
-                .setAuthor({
-                    name: 'Request Update',
-                    iconURL: config.CheckmarkIcon,
-                    url: config.SupportServer
-                })
-                .setDescription('**➡️ Your request has been successfully processed.**\n**➡️ Please use buttons to control playback**')
-                 .setFooter({ text: '🎶 Enjoy your music!'}),
-
-            new EmbedBuilder()
-                .setColor(config.embedColor)
-                .setAuthor({
-                    name: 'Request Update',
-                    iconURL: config.CheckmarkIcon,
-                    url: config.SupportServer
-                })
-                .setDescription('**➡️ Your request has been successfully processed.**\n**➡️ Please use buttons to control playback**')
-                 .setFooter({ text: '🎶 Enjoy your music!'}),
-
-            new EmbedBuilder()
-                .setColor(config.embedColor)
-                .setAuthor({
-                    name: 'Request Update',
-                    iconURL: config.CheckmarkIcon,
-                    url: config.SupportServer
-                })
-                .setDescription('**➡️ Your request has been successfully processed.**\n**➡️ Please use buttons to control playback**')
-                .setFooter({ text: '🎶 Enjoy your music!'})
-        ];
-
-        const randomIndex = Math.floor(Math.random() * embeds.length);
-        await interaction.followUp({ embeds: [embeds[randomIndex]] });
+        await interaction.followUp({ embeds: [randomEmbed] });
 
     } catch (error) {
         console.error('Error processing play command:', error);
@@ -134,7 +119,11 @@ async function play(client, interaction) {
             .setTitle('Error')
             .setDescription('❌ An error occurred while processing your request.');
 
-        await interaction.editReply({ embeds: [errorEmbed] });
+        if (interaction.deferred || interaction.replied) {
+            await interaction.editReply({ embeds: [errorEmbed] });
+        } else {
+            await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
+        }
     }
 }
 
@@ -150,10 +139,8 @@ module.exports = {
     }],
     run: play,
     queueNames: queueNames,
-    requesters: requesters 
+    requesters: requesters
 };
-
-
 
 /*
 
