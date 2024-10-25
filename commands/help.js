@@ -47,7 +47,6 @@ Your ultimate music companion on Discord. Here are the available commands:
 [ /volume  ] - Sets the volume of the player.
 [ /ping    ] - Check bot latency.
 [ /help    ] - Display this help menu.
-[ /loop    ] - Loops music.
 \`\`\`
       `;
 
