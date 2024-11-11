@@ -260,11 +260,36 @@ function disableLoop(player, channel) {
 }
 
 function showQueue(channel) {
-    const queueMessage = queueNames.length > 0
-        ? `🎵 **Now Playing:**\n${formatTrack(queueNames[0])}\n\n📜 **Queue:**\n${queueNames.slice(1).map((song, index) => `${index + 1}. ${formatTrack(song)}`).join('\n')}`
-        : "The queue is empty.";
-    sendEmbed(channel, queueMessage);
+    if (queueNames.length === 0) {
+        sendEmbed(channel, "The queue is empty.");
+        return;
+    }
+
+    const nowPlaying = `🎵 **Now Playing:**\n${formatTrack(queueNames[0])}`;
+    const queueChunks = [];
+
+    // Split the queue into chunks of 10 songs per embed
+    for (let i = 1; i < queueNames.length; i += 10) {
+        const chunk = queueNames.slice(i, i + 10)
+            .map((song, index) => `${i + index}. ${formatTrack(song)}`)
+            .join('\n');
+        queueChunks.push(chunk);
+    }
+
+    // Send the "Now Playing" message first
+    channel.send({
+        embeds: [new EmbedBuilder().setColor(config.embedColor).setDescription(nowPlaying)]
+    }).catch(console.error);
+
+    // Send each chunk as a separate embed
+    queueChunks.forEach(async (chunk) => {
+        const embed = new EmbedBuilder()
+            .setColor(config.embedColor)
+            .setDescription(`📜 **Queue:**\n${chunk}`);
+        await channel.send({ embeds: [embed] }).catch(console.error);
+    });
 }
+
 
 function createActionRow1(disabled) {
     return new ActionRowBuilder()
