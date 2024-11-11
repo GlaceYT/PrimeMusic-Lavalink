@@ -7,8 +7,8 @@
     "discord.js": "^14.15.1",
     "dotenv": "^16.4.5",
     "erela.js": "^2.4.0",
+    "musicard": "^2.0.5",
     "express": "^4.19.2",
-    "mewcard": "^1.7.4",
     "node-fetch": "^2.7.0",
     "riffy": "^1.0.3",
     "songcard": "^1.2.13"
