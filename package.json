@@ -1,6 +1,6 @@
 {
   "name": "prime-music",
-  "version": "1.0",
+  "version": "1.1",
   "description": "Music Bot",
   "main": "index.js",
   "dependencies": {
