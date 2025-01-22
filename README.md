@@ -11,14 +11,14 @@ Use /play to start playing the songs.
 
 Links / Text / Playlists
  
-English (en)
-Spanish (es)
-French (fr)
-German (de)
-Chinese (Simplified) (cn)
-Japanese (ja)
-Korean (ko)
-Russian (ru)
-Portuguese (pt)
-Arabic (ar)
+English (en),
+Spanish (es),
+French (fr),
+German (de),
+Chinese (Simplified) (cn),
+Japanese (ja),
+Korean (ko),
+Russian (ru),
+Portuguese (pt),
+Arabic (ar),
 Vietnamese (vi)
