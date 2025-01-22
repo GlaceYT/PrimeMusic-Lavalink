@@ -1,0 +1,24 @@
+{
+  "name": "prime-music",
+  "version": "1.2",
+  "description": "Music Bot",
+  "main": "index.js",
+  "dependencies": {
+    "discord.js": "^14.15.1",
+    "dotenv": "^16.4.7",
+    "express": "^4.19.2",
+    "mongodb": "^6.12.0",
+    "musicard": "^2.0.5",
+    "node-fetch": "^2.7.0",
+    "riffy": "^1.0.3",
+    "songcard": "^1.2.13"
+  },
+  "scripts": {
+    "start": "node index.js"
+  },
+  "author": "SSRR",
+  "license": "XX",
+  "engines": {
+    "node": "20.x"
+  }
+}
