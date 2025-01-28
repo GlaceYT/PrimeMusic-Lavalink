@@ -166,7 +166,7 @@ function initializePlayer(client) {
         } catch (error) {
             console.error("Error handling autoplay:", error);
             player.destroy();
-            await channel.send("⚠️ **An error occurred. Disconnecting...**");
+            await channel.send("👾**Queue Empty! Disconnecting...**");
         }
     });
     
