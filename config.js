@@ -14,18 +14,18 @@ module.exports = {
   embedTimeout: 5, 
   errorLog: "", 
   nodes: [
-    {
-      name: "Catfein ID",
-      password: "catfein",
-      host: "lava.catfein.com",
-      port: 4000,
+     {
+      name: "Koi Node V4",
+      password: "prplmoe.me",
+      host: "lavav4.prplmoe.me",
+      port: 1118,
       secure: false
     },
-    { 
-      name: "saher",
-      password: "saher.inzeworld.com",
-      host: "lava.inzeworld.com",
-      port: 3128,
+    {
+      name: "ChalresNaig Node",
+      password: "NAIGLAVA-dash.techbyte.host",
+      host: "lavahatry4.techbyte.host",
+      port: 3000,
       secure: false
     }
   ]
