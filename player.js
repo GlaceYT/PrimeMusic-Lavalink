@@ -1,4 +1,4 @@
-const { Riffy } = require("riffy");
+const { Riffy, Player } = require("riffy");
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder, PermissionsBitField } = require("discord.js");
 const { queueNames, requesters } = require("./commands/play");
 const { Dynamic } = require("musicard");
@@ -246,7 +246,7 @@ async function handleInteraction(i, player, channel) {
             disableLoop(player, channel);
             break;
         case 'showQueue':
-            showQueue(channel);
+            showNowPlaying(channel, player);
             break;
         case 'clearQueue':
             player.queue.clear();
@@ -320,34 +320,27 @@ function disableLoop(player, channel) {
     sendEmbed(channel, "❌ **Loop is disabled!**");
 }
 
-function showQueue(channel) {
-    if (queueNames.length === 0) {
-        sendEmbed(channel, "The queue is empty.");
+function showNowPlaying(channel, player) {
+    if (!player || !player.current || !player.current.info) {
+        console.log("🚫 No song is currently playing.");
+        sendEmbed(channel, "🚫 No song is currently playing.");
         return;
     }
-    const queueChunks = [];
 
- 
-    for (let i = 1; i < queueNames.length; i += 10) {
-        const chunk = queueNames.slice(i, i + 10)
-            .map((song, index) => `${i + index}. ${formatTrack(song)}`)
-            .join('\n');
-        queueChunks.push(chunk);
-    }
+    const track = player.current.info; 
 
-  
-    channel.send({
-        embeds: [new EmbedBuilder().setColor(config.embedColor).setDescription(nowPlaying)]
-    }).catch(console.error);
+    //console.log(`🎶 Now Playing: ${track.title} by ${track.author}`);
 
-  
-    queueChunks.forEach(async (chunk) => {
-        const embed = new EmbedBuilder()
-            .setColor(config.embedColor)
-            .setDescription(`📜 **Queue:**\n${chunk}`);
-        await channel.send({ embeds: [embed] }).catch(console.error);
-    });
+    const embed = new EmbedBuilder()
+        .setColor(config.embedColor)
+        .setAuthor({ name: "🎵 Now Playing", iconURL: musicIcons.beats2Icon })
+        .setDescription(`- **[${track.title}](${track.uri})**\n- **Artist:** ${track.author}`)
+        .setThumbnail(track.thumbnail)
+        .setFooter({ text: "Enjoy your music! 🎶", iconURL: musicIcons.heartIcon });
+
+    channel.send({ embeds: [embed] }).catch(console.error);
 }
+
 
 function createActionRow1(disabled) {
     return new ActionRowBuilder()
@@ -355,7 +348,7 @@ function createActionRow1(disabled) {
             new ButtonBuilder().setCustomId("loopToggle").setEmoji('🔁').setStyle(ButtonStyle.Secondary).setDisabled(disabled),
             new ButtonBuilder().setCustomId("disableLoop").setEmoji('❌').setStyle(ButtonStyle.Secondary).setDisabled(disabled),
             new ButtonBuilder().setCustomId("skipTrack").setEmoji('⏭️').setStyle(ButtonStyle.Secondary).setDisabled(disabled),
-            new ButtonBuilder().setCustomId("showQueue").setEmoji('📜').setStyle(ButtonStyle.Secondary).setDisabled(disabled),
+            new ButtonBuilder().setCustomId("showQueue").setEmoji('💎').setStyle(ButtonStyle.Secondary).setDisabled(disabled),
             new ButtonBuilder().setCustomId("clearQueue").setEmoji('🗑️').setStyle(ButtonStyle.Secondary).setDisabled(disabled)
         );
 }
