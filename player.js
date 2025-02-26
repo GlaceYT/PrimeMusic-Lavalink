@@ -322,25 +322,13 @@ function disableLoop(player, channel) {
 
 function showNowPlaying(channel, player) {
     if (!player || !player.current || !player.current.info) {
-        console.log("🚫 No song is currently playing.");
-        sendEmbed(channel, "🚫 No song is currently playing.");
+        sendEmbed(channel, "🚫 **No song is currently playing.**");
         return;
     }
 
-    const track = player.current.info; 
-
-    //console.log(`🎶 Now Playing: ${track.title} by ${track.author}`);
-
-    const embed = new EmbedBuilder()
-        .setColor(config.embedColor)
-        .setAuthor({ name: "🎵 Now Playing", iconURL: musicIcons.beats2Icon })
-        .setDescription(`- **[${track.title}](${track.uri})**\n- **Artist:** ${track.author}`)
-        .setThumbnail(track.thumbnail)
-        .setFooter({ text: "Enjoy your music! 🎶", iconURL: musicIcons.heartIcon });
-
-    channel.send({ embeds: [embed] }).catch(console.error);
+    const track = player.current.info;
+    sendEmbed(channel, `🎵 **Now Playing:** [${track.title}](${track.uri}) - ${track.author}`);
 }
-
 
 function createActionRow1(disabled) {
     return new ActionRowBuilder()
