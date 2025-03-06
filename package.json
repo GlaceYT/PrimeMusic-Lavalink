@@ -4,6 +4,7 @@
   "description": "Music Bot",
   "main": "index.js",
   "dependencies": {
+    "axios": "^1.8.1",
     "discord.js": "^14.15.1",
     "dotenv": "^16.4.7",
     "express": "^4.19.2",
@@ -11,7 +12,10 @@
     "musicard": "^2.0.5",
     "node-fetch": "^2.7.0",
     "riffy": "^1.0.3",
-    "songcard": "^1.2.13"
+    "songcard": "^1.2.13",
+    "spotify-url-info": "^3.2.18",
+    "spotify-web-api-node": "^5.0.2",
+    "yt-search": "^2.12.1"
   },
   "scripts": {
     "start": "node index.js"
