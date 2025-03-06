@@ -1,8 +1,46 @@
 const { ApplicationCommandOptionType, EmbedBuilder } = require('discord.js');
 const config = require('../config.js');
 const musicIcons = require('../UI/icons/musicicons.js');
-const queueNames = [];
+const SpotifyWebApi = require('spotify-web-api-node');
+const { getData } = require('spotify-url-info')(require('node-fetch'));
 const requesters = new Map();
+
+
+const spotifyApi = new SpotifyWebApi({
+    clientId: config.spotifyClientId, 
+    clientSecret: config.spotifyClientSecret,
+});
+
+
+async function getSpotifyPlaylistTracks(playlistId) {
+    try {
+        const data = await spotifyApi.clientCredentialsGrant();
+        spotifyApi.setAccessToken(data.body.access_token);
+
+        let tracks = [];
+        let offset = 0;
+        let limit = 100;
+        let total = 0;
+
+        do {
+            const response = await spotifyApi.getPlaylistTracks(playlistId, { limit, offset });
+            total = response.body.total;
+            offset += limit;
+
+            for (const item of response.body.items) {
+                if (item.track && item.track.name && item.track.artists) {
+                    const trackName = `${item.track.name} - ${item.track.artists.map(a => a.name).join(', ')}`;
+                    tracks.push(trackName);
+                }
+            }
+        } while (tracks.length < total);
+
+        return tracks;
+    } catch (error) {
+        console.error("Error fetching Spotify playlist tracks:", error);
+        return [];
+    }
+}
 
 async function play(client, interaction, lang) {
     try {
@@ -11,8 +49,8 @@ async function play(client, interaction, lang) {
         if (!interaction.member.voice.channelId) {
             const embed = new EmbedBuilder()
                 .setColor('#ff0000')
-                .setAuthor({ 
-                    name: lang.play.embed.error, 
+                .setAuthor({
+                    name: lang.play.embed.error,
                     iconURL: musicIcons.alertIcon,
                     url: config.SupportServer
                 })
@@ -26,7 +64,7 @@ async function play(client, interaction, lang) {
         if (!client.riffy.nodes || client.riffy.nodes.size === 0) {
             const embed = new EmbedBuilder()
                 .setColor('#ff0000')
-                .setAuthor({ 
+                .setAuthor({
                     name: lang.play.embed.error,
                     iconURL: musicIcons.alertIcon,
                     url: config.SupportServer
@@ -47,38 +85,48 @@ async function play(client, interaction, lang) {
 
         await interaction.deferReply();
 
-        const resolve = await client.riffy.resolve({ query: query, requester: interaction.user.username });
-        if (!resolve || typeof resolve !== 'object') {
-            throw new TypeError('Resolve response is not an object');
-        }
+        let tracksToQueue = [];
+        let isPlaylist = false;
 
-        const { loadType, tracks, playlistInfo } = resolve;
+        if (query.includes('spotify.com')) {
+            try {
+                const spotifyData = await getData(query);
 
-        if (!Array.isArray(tracks)) {
-            throw new TypeError('Expected tracks to be an array');
-        }
+                if (spotifyData.type === 'track') {
+                    const trackName = `${spotifyData.name} - ${spotifyData.artists.map(a => a.name).join(', ')}`;
+                    tracksToQueue.push(trackName);
+                } else if (spotifyData.type === 'playlist') {
+                    isPlaylist = true;
+                    const playlistId = query.split('/playlist/')[1].split('?')[0]; 
+                    tracksToQueue = await getSpotifyPlaylistTracks(playlistId);
+                }
+            } catch (err) {
+                console.error('Error fetching Spotify data:', err);
+                await interaction.followUp({ content: "❌ Failed to fetch Spotify data." });
+                return;
+            }
+        } else {
+            
+            const resolve = await client.riffy.resolve({ query, requester: interaction.user.username });
 
-        if (loadType === 'playlist') {
-            for (const track of tracks) {
-                track.info.requester = interaction.user.username;
-                player.queue.add(track);
-                queueNames.push(`[${track.info.title} - ${track.info.author}](${track.info.uri})`);
-                requesters.set(track.info.uri, interaction.user.username);
+            if (!resolve || typeof resolve !== 'object' || !Array.isArray(resolve.tracks)) {
+                throw new TypeError('Invalid response from Riffy');
             }
 
-            if (!player.playing && !player.paused) player.play();
-
-        } else if (loadType === 'search' || loadType === 'track') {
-            const track = tracks.shift();
-            track.info.requester = interaction.user.username;
-
-            player.queue.add(track);
-            queueNames.push(`[${track.info.title} - ${track.info.author}](${track.info.uri})`);
-            requesters.set(track.info.uri, interaction.user.username);
-
-            if (!player.playing && !player.paused) player.play();
-        } else {
-            const errorEmbed = new EmbedBuilder()
+            if (resolve.loadType === 'playlist') {
+                isPlaylist = true;
+                for (const track of resolve.tracks) {
+                    track.info.requester = interaction.user.username;
+                    player.queue.add(track);
+                    requesters.set(track.info.uri, interaction.user.username);
+                }
+            } else if (resolve.loadType === 'search' || resolve.loadType === 'track') {
+                const track = resolve.tracks.shift();
+                track.info.requester = interaction.user.username;
+                player.queue.add(track);
+                requesters.set(track.info.uri, interaction.user.username);
+            } else {
+                const errorEmbed = new EmbedBuilder()
                 .setColor(config.embedColor)
                 .setAuthor({ 
                     name: lang.play.embed.error,
@@ -88,39 +136,47 @@ async function play(client, interaction, lang) {
                 .setFooter({ text: lang.footer, iconURL: musicIcons.heartIcon })
                 .setDescription(lang.play.embed.noResults);
 
-            await interaction.editReply({ embeds: [errorEmbed] });
-            return;
+            await interaction.followUp({ embeds: [errorEmbed] });
+                return;
+            }
         }
 
-        const randomEmbed = new EmbedBuilder()
-            .setColor(config.embedColor)
-            .setAuthor({
-                name: lang.play.embed.requestUpdated,
-                iconURL: musicIcons.beats2Icon,
-                url: config.SupportServer
-            })
-            .setDescription(lang.play.embed.successProcessed)
-            .setFooter({ text: lang.footer, iconURL: musicIcons.heartIcon });
+        let queuedTracks = 0;
 
-        await interaction.followUp({ embeds: [randomEmbed] });
+       
+        for (const trackQuery of tracksToQueue) {
+            const resolve = await client.riffy.resolve({ query: trackQuery, requester: interaction.user.username });
+            if (resolve.tracks.length > 0) {
+                const trackInfo = resolve.tracks[0];
+                player.queue.add(trackInfo);
+                requesters.set(trackInfo.uri, interaction.user.username);
+                queuedTracks++;
+            }
+        }
+
+        if (!player.playing && !player.paused) player.play();
+
+        const randomEmbed = new EmbedBuilder()
+        .setColor(config.embedColor)
+        .setAuthor({
+            name: lang.play.embed.requestUpdated,
+            iconURL: musicIcons.beats2Icon,
+            url: config.SupportServer
+        })
+        .setDescription(lang.play.embed.successProcessed)
+        .setFooter({ text: lang.footer, iconURL: musicIcons.heartIcon });
+    
+        const message = await interaction.followUp({ embeds: [randomEmbed] });
+
+        setTimeout(() => {
+            message.delete().catch(() => {}); 
+        }, 3000);
+        
+    
 
     } catch (error) {
         console.error('Error processing play command:', error);
-        const errorEmbed = new EmbedBuilder()
-            .setColor('#ff0000')
-            .setAuthor({ 
-                name: lang.play.embed.error,
-                iconURL: musicIcons.alertIcon,
-                url: config.SupportServer
-            })
-            .setFooter({ text: lang.footer, iconURL: musicIcons.heartIcon })
-            .setDescription(lang.play.embed.errorProcessing);
-
-        if (interaction.deferred || interaction.replied) {
-            await interaction.editReply({ embeds: [errorEmbed] });
-        } else {
-            await interaction.reply({ embeds: [errorEmbed], ephemeral: true });
-        }
+        await interaction.followUp({ content: "❌ An error occurred while processing the request." });
     }
 }
 
@@ -135,6 +191,5 @@ module.exports = {
         required: true
     }],
     run: play,
-    queueNames: queueNames,
-    requesters: requesters
+    requesters: requesters,
 };
