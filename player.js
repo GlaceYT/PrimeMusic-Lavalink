@@ -1,16 +1,18 @@
 const { Riffy, Player } = require("riffy");
 const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder, PermissionsBitField } = require("discord.js");
-const { queueNames, requesters } = require("./commands/play");
+const { requesters } = require("./commands/play");
 const { Dynamic } = require("musicard");
 const config = require("./config.js");
 const musicIcons = require('./UI/icons/musicicons.js');
 const colors = require('./UI/colors/colors');
 const fs = require("fs");
 const path = require("path");
+const axios = require('axios');
 const { autoplayCollection } = require('./mongodb.js');
+const guildTrackMessages = new Map();
+
 async function sendMessageWithPermissionsCheck(channel, embed, attachment, actionRow1, actionRow2) {
     try {
-   
         const permissions = channel.permissionsFor(channel.guild.members.me);
         if (!permissions.has(PermissionsBitField.Flags.SendMessages) ||
             !permissions.has(PermissionsBitField.Flags.EmbedLinks) ||
@@ -58,9 +60,6 @@ function initializePlayer(client) {
         restVersion: "v4",
     });
 
-    let currentTrackMessageId = null;
-    let collector = null;
-
     client.riffy.on("nodeConnect", node => {
         console.log(`${colors.cyan}[ LAVALINK ]${colors.reset} ${colors.green}Node ${node.name} Connected ✅${colors.reset}`);
     });
@@ -71,8 +70,12 @@ function initializePlayer(client) {
 
     client.riffy.on("trackStart", async (player, track) => {
         const channel = client.channels.cache.get(player.textChannel);
+        const guildId = player.guildId;
         const trackUri = track.info.uri;
         const requester = requesters.get(trackUri);
+
+        // Clean up previous track messages for this guild
+        await cleanupPreviousTrackMessages(channel, guildId);
 
         try {
             const musicard = await Dynamic({
@@ -110,16 +113,23 @@ function initializePlayer(client) {
             .setImage('attachment://musicard.png')
             .setColor('#FF7A00');
 
-          
             const actionRow1 = createActionRow1(false);
             const actionRow2 = createActionRow2(false);
 
             const message = await sendMessageWithPermissionsCheck(channel, embed, attachment, actionRow1, actionRow2);
+            
             if (message) {
-                currentTrackMessageId = message.id;
+                // Store the track message for this guild
+                if (!guildTrackMessages.has(guildId)) {
+                    guildTrackMessages.set(guildId, []);
+                }
+                guildTrackMessages.get(guildId).push({
+                    messageId: message.id,
+                    channelId: channel.id,
+                    type: 'track'
+                });
 
-                if (collector) collector.stop(); 
-                collector = setupCollector(client, player, channel, message);
+                const collector = setupCollector(client, player, channel, message);
             }
 
         } catch (error) {
@@ -131,15 +141,12 @@ function initializePlayer(client) {
         }
     });
 
-    
     client.riffy.on("trackEnd", async (player) => {
-        await disableTrackMessage(client, player);
-        currentTrackMessageId = null;
+        await cleanupTrackMessages(client, player);
     });
 
     client.riffy.on("playerDisconnect", async (player) => {
-        await disableTrackMessage(client, player);
-        currentTrackMessageId = null;
+        await cleanupTrackMessages(client, player);
     });
 
     client.riffy.on("queueEnd", async (player) => {
@@ -147,44 +154,73 @@ function initializePlayer(client) {
         const guildId = player.guildId;
     
         try {
-         
             const autoplaySetting = await autoplayCollection.findOne({ guildId });
     
             if (autoplaySetting?.autoplay) {
-                //console.log(`Autoplay is enabled for guild: ${guildId}`);
                 const nextTrack = await player.autoplay(player);
     
                 if (!nextTrack) {
+                    await cleanupTrackMessages(client, player);
                     player.destroy();
                     await channel.send("⚠️ **No more tracks to autoplay. Disconnecting...**");
                 }
             } else {
+                await cleanupTrackMessages(client, player);
                 console.log(`Autoplay is disabled for guild: ${guildId}`);
                 player.destroy();
                 await channel.send("🎶 **Queue has ended. Autoplay is disabled.**");
             }
         } catch (error) {
             console.error("Error handling autoplay:", error);
+            await cleanupTrackMessages(client, player);
             player.destroy();
             await channel.send("👾**Queue Empty! Disconnecting...**");
         }
     });
-    
-    async function disableTrackMessage(client, player) {
-        const channel = client.channels.cache.get(player.textChannel);
-        if (!channel || !currentTrackMessageId) return;
+}
 
+async function cleanupPreviousTrackMessages(channel, guildId) {
+    const messages = guildTrackMessages.get(guildId) || [];
+    
+    for (const messageInfo of messages) {
         try {
-            const message = await channel.messages.fetch(currentTrackMessageId);
-            if (message) {
-                const disabledRow1 = createActionRow1(true);
-                const disabledRow2 = createActionRow2(true);
-                await message.edit({ components: [disabledRow1, disabledRow2] });
+            const fetchChannel = channel.client.channels.cache.get(messageInfo.channelId);
+            if (fetchChannel) {
+                const message = await fetchChannel.messages.fetch(messageInfo.messageId).catch(() => null);
+                if (message) {
+                    await message.delete().catch(() => {});
+                }
             }
         } catch (error) {
-            console.error("Failed to disable message components:", error);
+            console.error("Error cleaning up previous track message:", error);
         }
     }
+
+    // Clear the previous messages for this guild
+    guildTrackMessages.set(guildId, []);
+}
+
+// New function to clean up track-related messages
+async function cleanupTrackMessages(client, player) {
+    const guildId = player.guildId;
+    const messages = guildTrackMessages.get(guildId) || [];
+    
+    for (const messageInfo of messages) {
+        try {
+            const channel = client.channels.cache.get(messageInfo.channelId);
+            if (channel) {
+                const message = await channel.messages.fetch(messageInfo.messageId).catch(() => null);
+                if (message) {
+                    await message.delete().catch(() => {});
+                }
+            }
+        } catch (error) {
+            console.error("Error cleaning up track message:", error);
+        }
+    }
+
+    // Clear the messages for this guild
+    guildTrackMessages.set(guildId, []);
 }
 function formatDuration(ms) {
     const seconds = Math.floor((ms / 1000) % 60);
@@ -201,7 +237,7 @@ function formatDuration(ms) {
 }
 function setupCollector(client, player, channel, message) {
     const filter = i => [
-        'loopToggle', 'skipTrack', 'disableLoop', 'showQueue', 'clearQueue',
+        'loopToggle', 'skipTrack', 'disableLoop', 'showLyrics', 'clearQueue',
         'stopTrack', 'pauseTrack', 'resumeTrack', 'volumeUp', 'volumeDown'
     ].includes(i.customId);
 
@@ -245,8 +281,8 @@ async function handleInteraction(i, player, channel) {
         case 'disableLoop':
             disableLoop(player, channel);
             break;
-        case 'showQueue':
-            showNowPlaying(channel, player);
+        case 'showLyrics':
+            showLyrics(channel, player);
             break;
         case 'clearQueue':
             player.queue.clear();
@@ -298,17 +334,6 @@ function adjustVolume(player, channel, amount) {
     }
 }
 
-function formatTrack(track) {
-    if (!track || typeof track !== 'string') return track;
-    
-    const match = track.match(/\[(.*?) - (.*?)\]\((.*?)\)/);
-    if (match) {
-        const [, title, author, uri] = match;
-        return `[${title} - ${author}](${uri})`;
-    }
-    
-    return track;
-}
 
 function toggleLoop(player, channel) {
     player.setLoop(player.loop === "track" ? "queue" : "track");
@@ -320,15 +345,149 @@ function disableLoop(player, channel) {
     sendEmbed(channel, "❌ **Loop is disabled!**");
 }
 
-function showNowPlaying(channel, player) {
+
+
+async function getLyrics(trackName, artistName, duration) {
+    try {
+        //console.log(`🔍 Fetching lyrics for: ${trackName} - ${artistName} (${duration}s)`);
+
+      
+        trackName = trackName
+            .replace(/\b(Official|Audio|Video|Lyrics|Theme|Soundtrack|Music|Full Version|HD|4K|Visualizer|Radio Edit|Live|Remix|Mix|Extended|Cover|Parody|Performance|Version|Unplugged|Reupload)\b/gi, "") 
+            .replace(/\s*[-_/|]\s*/g, " ") 
+            .replace(/\s+/g, " ") 
+            .trim();
+
+      
+        artistName = artistName
+            .replace(/\b(Topic|VEVO|Records|Label|Productions|Entertainment|Ltd|Inc|Band|DJ|Composer|Performer)\b/gi, "")
+            .replace(/ x /gi, " & ") 
+            .replace(/\s+/g, " ") 
+            .trim();
+
+        //console.log(`✅ Cleaned Data: ${trackName} - ${artistName} (${duration}s)`);
+
+        
+        let response = await axios.get(`https://lrclib.net/api/get`, {
+            params: { track_name: trackName, artist_name: artistName, duration }
+        });
+
+        if (response.data.syncedLyrics || response.data.plainLyrics) {
+            return response.data.syncedLyrics || response.data.plainLyrics;
+        }
+
+       
+        response = await axios.get(`https://lrclib.net/api/get`, {
+            params: { track_name: trackName, artist_name: artistName }
+        });
+
+        return response.data.syncedLyrics || response.data.plainLyrics;
+    } catch (error) {
+        console.error("❌ Lyrics fetch error:", error.response?.data?.message || error.message);
+        return null;
+    }
+}
+
+
+
+async function showLyrics(channel, player) {
     if (!player || !player.current || !player.current.info) {
         sendEmbed(channel, "🚫 **No song is currently playing.**");
         return;
     }
 
     const track = player.current.info;
-    sendEmbed(channel, `🎵 **Now Playing:** [${track.title}](${track.uri}) - ${track.author}`);
+    const lyrics = await getLyrics(track.title, track.author, Math.floor(track.length / 1000));
+
+    if (!lyrics) {
+        sendEmbed(channel, "❌ **Lyrics not found!**");
+        return;
+    }
+
+    
+    const lines = lyrics.split('\n').map(line => line.trim()).filter(Boolean);
+    const songDuration = Math.floor(track.length / 1000); 
+
+    const embed = new EmbedBuilder()
+        .setTitle(`🎵 Live Lyrics: ${track.title}`)
+        .setDescription("🔄 Syncing lyrics...")
+        .setColor(config.embedColor);
+
+    const stopButton = new ButtonBuilder()
+        .setCustomId("stopLyrics")
+        .setLabel("Stop Lyrics")
+        .setStyle(ButtonStyle.Danger);
+
+    const fullButton = new ButtonBuilder()
+        .setCustomId("fullLyrics")
+        .setLabel("Full Lyrics")
+        .setStyle(ButtonStyle.Primary);
+
+    const row = new ActionRowBuilder().addComponents(fullButton, stopButton);
+    
+    const message = await channel.send({ embeds: [embed], components: [row] });
+
+    // Store the lyrics message
+    const guildId = player.guildId;
+    if (!guildTrackMessages.has(guildId)) {
+        guildTrackMessages.set(guildId, []);
+    }
+    guildTrackMessages.get(guildId).push({
+        messageId: message.id,
+        channelId: channel.id,
+        type: 'lyrics'
+    });
+
+    const updateLyrics = async () => {
+        const currentTime = Math.floor(player.position / 1000); 
+        const totalLines = lines.length;
+
+        const linesPerSecond = totalLines / songDuration; 
+        const currentLineIndex = Math.floor(currentTime * linesPerSecond); 
+
+        const start = Math.max(0, currentLineIndex - 3);
+        const end = Math.min(totalLines, currentLineIndex + 3);
+        const visibleLines = lines.slice(start, end).join('\n');
+
+        embed.setDescription(visibleLines);
+        await message.edit({ embeds: [embed] });
+    };
+
+    const interval = setInterval(updateLyrics, 3000);
+    updateLyrics(); 
+
+    const collector = message.createMessageComponentCollector({ time: 600000 });
+
+    collector.on('collect', async i => {
+        await i.deferUpdate();
+    
+        if (i.customId === "stopLyrics") {
+            clearInterval(interval);
+            await message.delete();
+        } else if (i.customId === "fullLyrics") {
+            clearInterval(interval);
+            embed.setDescription(lines.join('\n'));
+    
+            const deleteButton = new ButtonBuilder()
+                .setCustomId("deleteLyrics")
+                .setLabel("Delete")
+                .setStyle(ButtonStyle.Danger);
+    
+            const deleteRow = new ActionRowBuilder().addComponents(deleteButton);
+    
+            await message.edit({ embeds: [embed], components: [deleteRow] });
+        } else if (i.customId === "deleteLyrics") {
+            await message.delete();
+        }
+    });
+
+    collector.on('end', () => {
+        clearInterval(interval);
+        message.delete().catch(() => {});
+    });
 }
+
+
 
 function createActionRow1(disabled) {
     return new ActionRowBuilder()
@@ -336,7 +495,7 @@ function createActionRow1(disabled) {
             new ButtonBuilder().setCustomId("loopToggle").setEmoji('🔁').setStyle(ButtonStyle.Secondary).setDisabled(disabled),
             new ButtonBuilder().setCustomId("disableLoop").setEmoji('❌').setStyle(ButtonStyle.Secondary).setDisabled(disabled),
             new ButtonBuilder().setCustomId("skipTrack").setEmoji('⏭️').setStyle(ButtonStyle.Secondary).setDisabled(disabled),
-            new ButtonBuilder().setCustomId("showQueue").setEmoji('💎').setStyle(ButtonStyle.Secondary).setDisabled(disabled),
+            new ButtonBuilder().setCustomId("showLyrics").setEmoji('🎤').setStyle(ButtonStyle.Secondary).setDisabled(disabled),
             new ButtonBuilder().setCustomId("clearQueue").setEmoji('🗑️').setStyle(ButtonStyle.Secondary).setDisabled(disabled)
         );
 }
