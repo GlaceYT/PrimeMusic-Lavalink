@@ -24,4 +24,20 @@ module.exports = {
       secure: false
     }
   ]
+  ALL IN ONE 
+    "lavalink": {
+          "identifier": "GlaceYT",
+          "password": "glaceyt",
+          "host": "193.226.78.187",
+          "port":  9372,
+          "secure": false
+        }
+  Prime Music
+    {
+        name: "GlaceYT",
+        password: "glaceyt",
+        host: "193.226.78.187",
+        port:  9372,
+        secure: false
+      }
 }
