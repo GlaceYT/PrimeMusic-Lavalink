@@ -5,10 +5,10 @@ Fork the Repositry and add your bot token. Must turn on intents and run the code
 Use /play to start playing the songs.
 
 # ENV
-TOKEN
+TOKEN 
  
 # Config.js
-Add mongoUri
+Add mongoUri & spotify details
 
 # Supports
 - YouTube
