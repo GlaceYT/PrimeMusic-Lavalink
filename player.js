@@ -150,33 +150,35 @@ function initializePlayer(client) {
     });
 
     client.riffy.on("queueEnd", async (player) => {
-        const channel = client.channels.cache.get(player.textChannel);
-        const guildId = player.guildId;
-    
-        try {
-            const autoplaySetting = await autoplayCollection.findOne({ guildId });
-    
-            if (autoplaySetting?.autoplay) {
-                const nextTrack = await player.autoplay(player);
-    
-                if (!nextTrack) {
-                    await cleanupTrackMessages(client, player);
-                    player.destroy();
-                    await channel.send("⚠️ **No more tracks to autoplay. Disconnecting...**");
-                }
-            } else {
+    const channel = client.channels.cache.get(player.textChannel);
+    const guildId = player.guildId;
+
+    try {
+        const autoplayCollection = getAutoplayCollection(); // 🛠 FIX: safely get collection now
+        const autoplaySetting = await autoplayCollection.findOne({ guildId });
+
+        if (autoplaySetting?.autoplay) {
+            const nextTrack = await player.autoplay(player);
+
+            if (!nextTrack) {
                 await cleanupTrackMessages(client, player);
-                console.log(`Autoplay is disabled for guild: ${guildId}`);
                 player.destroy();
-                await channel.send("🎶 **Queue has ended. Autoplay is disabled.**");
+                await channel.send("⚠️ **No more tracks to autoplay. Disconnecting...**");
             }
-        } catch (error) {
-            console.error("Error handling autoplay:", error);
+        } else {
             await cleanupTrackMessages(client, player);
+            console.log(`Autoplay is disabled for guild: ${guildId}`);
             player.destroy();
-            await channel.send("👾**Queue Empty! Disconnecting...**");
+            await channel.send("🎶 **Queue has ended. Autoplay is disabled.**");
         }
-    });
+    } catch (error) {
+        console.error("Error handling autoplay:", error);
+        await cleanupTrackMessages(client, player);
+        player.destroy();
+        await channel.send("👾**Queue Empty! Disconnecting...**");
+    }
+});
+
 }
 
 async function cleanupPreviousTrackMessages(channel, guildId) {
