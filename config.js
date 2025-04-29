@@ -23,10 +23,10 @@ module.exports = {
     }
   ],
   lavalink: {
-    identifier: "GlaceYT",
-    password: "glaceyt",
-    host: "193.226.78.187",
-    port: 9372,
+    identifier: "MuzammilOPYT",
+    password: "yourpasswordhere",
+    host: "ind1.zapto.org",
+    port: 25575,
     secure: false
   }
 };
