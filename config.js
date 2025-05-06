@@ -23,10 +23,10 @@ module.exports = {
     }
   ],
   lavalink: {
-    identifier: "MuzammilOPYT",
-    password: "yourpasswordhere",
-    host: "ind1.zapto.org",
-    port: 25575,
+    identifier: "dj wale babu",
+    password: "inosuke",
+    host: "inosuke.69.mu",
+    port: 11622,
     secure: false
   }
 };
