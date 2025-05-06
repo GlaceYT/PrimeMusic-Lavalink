@@ -24,9 +24,9 @@ module.exports = {
   ],
   lavalink: {
     identifier: "GlaceYT",
-    password: "glaceyt",
-    host: "193.226.78.187",
-    port: 3543,
+    password: "yourpasswordhere",
+    host: "160.191.77.60",
+    port: 3342,
     secure: false
   }
 };
