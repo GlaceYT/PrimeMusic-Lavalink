@@ -23,10 +23,10 @@ module.exports = {
     }
   ],
   lavalink: {
-    name: "GlaceYT",
-    password: "123456",
-    host: "160.191.77.60",
-    port: 3342,
-    secure: false
-  }
+      name: "GlaceYT",
+      password: "glaceyt",
+      host: "193.226.78.187",
+      port:  3543,
+      secure: false
+    }
 };
