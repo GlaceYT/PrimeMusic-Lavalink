@@ -16,14 +16,14 @@ module.exports = {
   nodes: [
     {
       name: "GlaceYT",
-      password: "yourpasswordhere",
+      password: "123456",
       host: "160.191.77.60",
       port: 3342,
       secure: false
     }
   ],
   lavalink: {
-    password: "yourpasswordhere",
+    password: "123456",
     host: "160.191.77.60",
     port: 3342,
     secure: false
