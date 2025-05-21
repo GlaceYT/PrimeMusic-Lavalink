@@ -2,6 +2,7 @@ const { Client, GatewayIntentBits } = require("discord.js");
 const config = require("./config.js");
 const fs = require("fs");
 const path = require('path');
+const ejs = require('ejs');
 const { initializePlayer } = require('./player');
 const { connectToDatabase } = require('./mongodb');
 const colors = require('./UI/colors/colors');
@@ -84,9 +85,50 @@ connectToDatabase().then(() => {
 const express = require("express");
 const app = express();
 const port = 3000;
+
+// Set view engine
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, 'views'));
+
+// Serve static files from the 'public' directory
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Middleware for parsing form data
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
 app.get('/', (req, res) => {
     const imagePath = path.join(__dirname, 'index.html');
     res.sendFile(imagePath);
+});
+
+app.get('/setup', (req, res) => {
+    // Sample data for the dashboard.
+    // In a real implementation, this would come from client.riffy or other bot systems.
+    const dashboardData = {
+        currentSong: 'Example Song Title - Artist',
+        queueLength: 5,
+        botStatus: 'Online and Playing'
+    };
+    res.render('setup', dashboardData);
+});
+
+app.post('/configure-channel', (req, res) => {
+    const { url, songName } = req.body;
+
+    if (!url || !songName) {
+        // In a real app, you'd render the setup page again with an error message
+        return res.status(400).send('URL and Song Name are required.');
+    }
+
+    // For now, just log the received data.
+    // Later, this will be expanded to save to config or database.
+    console.log(`${colors.cyan}[ SETUP ]${colors.reset} Received URL: ${url}, Song Name: ${songName}`);
+
+    // Redirect back to the setup page, perhaps with a success query parameter
+    // For simplicity, just redirecting back.
+    // In a full application, you might want to add a success message.
+    res.redirect('/setup');
 });
 
 app.listen(port, () => {

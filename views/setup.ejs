@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bot Setup</title>
+    <link rel="stylesheet" href="/css/style.css"> <!-- We'll create this later -->
+</head>
+<body>
+    <h1>Bot Configuration</h1>
+
+    <h2>Setup Channel</h2>
+    <form action="/configure-channel" method="POST">
+        <div>
+            <label for="url">URL:</label>
+            <input type="text" id="url" name="url" required>
+        </div>
+        <div>
+            <label for="songName">Song Name:</label>
+            <input type="text" id="songName" name="songName" required>
+        </div>
+        <button type="submit">Save Configuration</button>
+    </form>
+
+    <hr>
+
+    <h2>Dashboard</h2>
+    <div id="dashboard">
+        <h3>Dashboard</h3>
+        <p>Current Song: <%= currentSong %></p>
+        <p>Queue Length: <%= queueLength %></p>
+        <p>Bot Status: <%= botStatus %></p>
+    </div>
+
+</body>
+</html>
