@@ -18,9 +18,9 @@ module.exports = {
   nodes: [
      {
       name: "GlaceYT",
-      password: "glace",
-      host: "87.106.62.92",
-      port:  11642,
+      password: "youshallnotpass",
+      host: "lavalink.jirayu.net",
+      port:  13592,
       secure: false
     }
   ]
