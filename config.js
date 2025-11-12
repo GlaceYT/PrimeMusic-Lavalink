@@ -5,7 +5,7 @@ module.exports = {
   language: "en",
   ownerID: ["1004206704994566164", ""], 
   mongodbUri : "",
-  spotifyClientId : "",
+  spotifyClientId : "https://cloud.mongodb.com/v2/69141005a237c07bdd4850f2#/clusters/starterTemplates",
   spotifyClientSecret : "",
   setupFilePath: './commands/setup.json',
   commandsDir: './commands',  
