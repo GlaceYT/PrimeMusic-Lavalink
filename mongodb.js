@@ -5,8 +5,8 @@ require('dotenv').config();
 
 let client; 
 
-if (config.mongodbUri) {
-    const uri = config.mongodbUri;
+if (config.mongodbUri || process.env.mongodbUri) {
+    const uri = config.mongodbUri || process.env.mongodbUri;
     client = new MongoClient(uri);
 } else {
     console.warn("\x1b[33m[ WARNING ]\x1b[0m MongoDB URI is not defined in the configuration.");
@@ -39,3 +39,4 @@ module.exports = {
     playlistCollection,
     autoplayCollection,
 };
+
