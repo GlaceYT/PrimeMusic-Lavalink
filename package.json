@@ -1,0 +1,24 @@
+{
+  "name": "prime-music",
+  "version": "1.4",
+  "description": "Advanced Lavalink Music Bot",
+  "main": "index.js",
+  "dependencies": {
+    "@napi-rs/canvas": "^0.1.83",
+    "axios": "^1.8.1",
+    "discord.js": "^14.25.1",
+    "dotenv": "^16.4.7",
+    "express": "^4.19.2",
+    "mongodb": "^6.12.0",
+    "node-fetch": "^2.7.0",
+    "riffy": "^1.0.3",
+    "spotify-url-info": "^3.2.18",
+    "spotify-web-api-node": "^5.0.2",
+    "yt-search": "^2.13.1"
+  },
+  "scripts": {
+    "start": "node index.js"
+  },
+  "author": "GlaceYT",
+  "license": "MIT License"
+}
