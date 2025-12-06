@@ -53,8 +53,6 @@ module.exports = {
                 player.pause(true);
             } catch (pauseError) {
                 console.warn(`[ PAUSE ] Error pausing player: ${pauseError.message}`);
-                // If pause fails, still try to send success message (player might be in transition)
-                // The error will be caught by outer catch if it's critical
             }
 
             return await sendSuccessResponse(
