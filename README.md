@@ -94,7 +94,7 @@ module.exports = {
   spotifyClientSecret: "your_spotify_client_secret", // Optional
   nodes: [
      {
-            name: "GlceYT",
+            name: "GlaceYT",
             password: "glace",
             host: "us-01.strixnodes.com",
             port: 8003,
