@@ -24,6 +24,11 @@ logs/
 tmp/
 *.tmp
 
+# Archive files (may contain secrets)
+*.rar
+*.zip
+*.7z
+
 # Build files
 dist/
 build/
