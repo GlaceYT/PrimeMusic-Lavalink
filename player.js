@@ -76,17 +76,33 @@ async function initializePlayer(client) {
 
     client.riffy.on("trackException", async (player, error) => {
         const langSync = getLangSync();
-        console.error(`${colors.cyan}[ LAVALINK ]${colors.reset} ${colors.red}${langSync.console?.player?.trackException?.replace('{guildId}', player.guildId).replace('{message}', error.message || 'Unknown error') || `Track Exception for guild ${player.guildId}: ${error.message || 'Unknown error'}`}${colors.reset}`);
-        const channel = client.channels.cache.get(player.textChannel);
+        const errorMsg = error?.message || 'Unknown error';
+        const isTimeout = errorMsg.includes('timeout') || errorMsg.includes('Read timed out') || errorMsg.includes('SocketTimeoutException');
+        
+        // Log timeout errors as warnings (they're common on slow connections)
+        if (isTimeout) {
+            console.warn(`${colors.cyan}[ LAVALINK ]${colors.reset} ${colors.yellow}Track timeout for guild ${player?.guildId || 'unknown'}: ${errorMsg}${colors.reset}`);
+        } else {
+            console.error(`${colors.cyan}[ LAVALINK ]${colors.reset} ${colors.red}${langSync.console?.player?.trackException?.replace('{guildId}', player?.guildId || 'unknown').replace('{message}', errorMsg) || `Track Exception for guild ${player?.guildId || 'unknown'}: ${errorMsg}`}${colors.reset}`);
+        }
+        
+        const channel = client.channels.cache.get(player?.textChannel);
         if (channel) {
             const lang = await getLang(player.guildId).catch(() => ({ console: { player: {} } }));
             const t = lang.console?.player || {};
+            
+            // More specific error message for timeouts
+            let errorMessage = t.trackError?.message || 'Failed to load the track.';
+            if (isTimeout) {
+                errorMessage = t.trackError?.timeoutMessage || 'Connection timeout while loading track. This is usually a network issue on the Lavalink server.';
+            }
+            
             const errorContainer = new ContainerBuilder()
                 .setAccentColor(0xff0000)
                 .addTextDisplayComponents(
                     (textDisplay) => textDisplay.setContent(
                         `${t.trackError?.title || '## ⚠️ Track Error'}\n\n` +
-                        `${t.trackError?.message || 'Failed to load the track.'}\n` +
+                        `${errorMessage}\n` +
                         `${t.trackError?.skipping || 'Skipping to next song...'}`
                     )
                 );
@@ -98,15 +114,32 @@ async function initializePlayer(client) {
             });
         }
         if (player && !player.destroyed) {
-            player.stop();
+            try {
+                player.stop();
+            } catch (stopError) {
+                // Ignore errors when stopping
+            }
         }
     });
 
     client.riffy.on("trackStuck", (player, error) => {
         const lang = getLangSync();
-        console.error(`${colors.cyan}[ LAVALINK ]${colors.reset} ${colors.red}${lang.console?.player?.trackStuck?.replace('{guildId}', player.guildId).replace('{message}', error.message || 'Unknown error') || `Track Stuck for guild ${player.guildId}: ${error.message || 'Unknown error'}`}${colors.reset}`);
+        const errorMsg = error?.message || 'Unknown error';
+        
+        // Don't log connection timeout errors as critical (they're handled elsewhere)
+        if (errorMsg.includes('Connect Timeout') || errorMsg.includes('fetch failed') || errorMsg.includes('timeout')) {
+            console.warn(`${colors.cyan}[ LAVALINK ]${colors.reset} ${colors.yellow}Track stuck due to connection timeout for guild ${player?.guildId || 'unknown'} - will retry${colors.reset}`);
+        } else {
+            console.error(`${colors.cyan}[ LAVALINK ]${colors.reset} ${colors.red}${lang.console?.player?.trackStuck?.replace('{guildId}', player?.guildId || 'unknown').replace('{message}', errorMsg) || `Track Stuck for guild ${player?.guildId || 'unknown'}: ${errorMsg}`}${colors.reset}`);
+        }
+        
+        // Only stop if player is valid and not destroyed
         if (player && !player.destroyed) {
-            player.stop();
+            try {
+                player.stop();
+            } catch (stopError) {
+                // Ignore errors when stopping stuck track
+            }
         }
     });
 
@@ -562,19 +595,39 @@ async function handleInteraction(client, i, player, channel) {
             await sendEmbed(channel, t.controls?.playbackStopped || '⏹️ **Playback has been stopped and player destroyed!**');
             break;
         case 'pauseTrack':
-            if (player.paused) {
-                await sendEmbed(channel, t.controls?.alreadyPaused || '⏸️ **Playback is already paused!**');
-            } else {
-                player.pause(true);
-                await sendEmbed(channel, t.controls?.playbackPaused || '⏸️ **Playback has been paused!**');
+            try {
+                if (!player || player.destroyed) {
+                    await sendEmbed(channel, t.controls?.playerDestroyed || '❌ **Player is not available!**');
+                    return;
+                }
+                if (player.paused) {
+                    await sendEmbed(channel, t.controls?.alreadyPaused || '⏸️ **Playback is already paused!**');
+                } else {
+                    player.pause(true);
+                    await sendEmbed(channel, t.controls?.playbackPaused || '⏸️ **Playback has been paused!**');
+                }
+            } catch (error) {
+                const langSync = getLangSync();
+                console.warn(`${colors.cyan}[ PLAYER ]${colors.reset} ${colors.yellow}Pause error: ${error.message}${colors.reset}`);
+                await sendEmbed(channel, t.controls?.pauseError || '⚠️ **Failed to pause. Please try again.**');
             }
             break;
         case 'resumeTrack':
-            if (!player.paused) {
-                await sendEmbed(channel, t.controls?.alreadyResumed || '▶️ **Playback is already resumed!**');
-            } else {
-                player.pause(false);
-                await sendEmbed(channel, t.controls?.playbackResumed || '▶️ **Playback has been resumed!**');
+            try {
+                if (!player || player.destroyed) {
+                    await sendEmbed(channel, t.controls?.playerDestroyed || '❌ **Player is not available!**');
+                    return;
+                }
+                if (!player.paused) {
+                    await sendEmbed(channel, t.controls?.alreadyResumed || '▶️ **Playback is already resumed!**');
+                } else {
+                    player.pause(false);
+                    await sendEmbed(channel, t.controls?.playbackResumed || '▶️ **Playback has been resumed!**');
+                }
+            } catch (error) {
+                const langSync = getLangSync();
+                console.warn(`${colors.cyan}[ PLAYER ]${colors.reset} ${colors.yellow}Resume error: ${error.message}${colors.reset}`);
+                await sendEmbed(channel, t.controls?.resumeError || '⚠️ **Failed to resume. Please try again.**');
             }
             break;
         case 'volumeUp':
