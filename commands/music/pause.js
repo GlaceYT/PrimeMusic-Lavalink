@@ -28,7 +28,34 @@ module.exports = {
                 return reply;
             }
 
-            player.pause(true);
+            // Validate player before pausing
+            if (!player || player.destroyed) {
+                return await handleCommandError(
+                    interaction,
+                    new Error('Player not available'),
+                    'pause',
+                    (t.errors?.title || '## ❌ Error') + '\n\n' + (t.errors?.message || 'Player is not available. Please start playing a song first.')
+                );
+            }
+
+            // Check if already paused
+            if (player.paused) {
+                return await sendSuccessResponse(
+                    interaction,
+                    '## ⏸️ Already Paused\n\n' +
+                    'The music is already paused.\n' +
+                    'Use `/resume` to continue playback.'
+                );
+            }
+
+            // Try to pause with error handling
+            try {
+                player.pause(true);
+            } catch (pauseError) {
+                console.warn(`[ PAUSE ] Error pausing player: ${pauseError.message}`);
+                // If pause fails, still try to send success message (player might be in transition)
+                // The error will be caught by outer catch if it's critical
+            }
 
             return await sendSuccessResponse(
                 interaction,
