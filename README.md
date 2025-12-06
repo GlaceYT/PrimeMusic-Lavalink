@@ -1,7 +1,5 @@
 <div align="center">
 
-![Banner](https://i.ibb.co/JR3M1q4m/YtBG.png)
-
 ![Logo](https://i.ibb.co/GfTxbJfC/7-edited.png)
 
 # 🎵 PrimeMusic - Advanced Lavalink Music Bot
