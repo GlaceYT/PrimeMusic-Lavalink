@@ -14,8 +14,8 @@ module.exports = {
   activityType: "LISTENING",  // Available activity types : LISTENING , PLAYING
   SupportServer: "https://discord.gg/xQF9f9yUEM",
   embedTimeout: 5,
-  showProgressBar: true,  // Show progress bar in track embed
-  showVisualizer: true,  // Show visualizer on music card
+  showProgressBar: false,  // Show progress bar in track embed
+  showVisualizer: false,  // Show visualizer on music card
   generateSongCard: true,  // custom song card image, if false uses thumbnail
   errorLog: "", 
   nodes: [
