@@ -71,13 +71,28 @@ async function sendSuccessResponse(interaction, message, color = null, deleteAft
 async function handleCommandError(interaction, error, commandName, customMessage = null) {
     console.error(`Error processing ${commandName} command:`, error);
     
-    const { getLang } = require('./languageLoader.js');
-    const lang = getLang(interaction.guildId);
+    const { getLang, getLangSync } = require('./languageLoader.js');
+
+    const lang = await getLang(interaction.guildId).catch(() => {
+   
+        return getLangSync();
+    });
+    
+
+    const utils = lang?.utils || {};
+    const responseHandler = utils?.responseHandler || {
+        defaultError: {
+            title: "## ❌ Error",
+            message: "An error occurred while processing the command.",
+            note: "Please try again later."
+        },
+        commandError: "❌ An error occurred while processing the {commandName} command."
+    };
     
     const errorMessage = customMessage || 
-        `${lang.utils.responseHandler.defaultError.title}\n\n` +
-        `${lang.utils.responseHandler.defaultError.message}\n` +
-        `${lang.utils.responseHandler.defaultError.note}`;
+        `${responseHandler.defaultError.title}\n\n` +
+        `${responseHandler.defaultError.message}\n` +
+        `${responseHandler.defaultError.note}`;
     
     const errorContainer = new ContainerBuilder()
         .setAccentColor(0xff0000)
@@ -105,8 +120,9 @@ async function handleCommandError(interaction, error, commandName, customMessage
             return reply;
         }
     } catch (e) {
+        const errorText = responseHandler.commandError.replace('{commandName}', commandName);
         return interaction.followUp({
-            content: lang.utils.responseHandler.commandError.replace('{commandName}', commandName),
+            content: errorText,
             ephemeral: true,
         }).catch(() => {});
     }
