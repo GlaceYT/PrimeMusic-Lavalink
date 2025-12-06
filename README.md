@@ -29,7 +29,7 @@
 - **Track History**: Automatic history tracking for played songs
 
 ### 🎨 User Experience
-- **Multi-Language Support**: 11 languages available
+- **Multi-Language Support**: 20+ languages available [ soon ]
 - **Interactive Controls**: Button-based controls for easy music management
 - **Progress Tracking**: Real-time progress bars and track information
 - **Visual Feedback**: Professional embeds and status updates
