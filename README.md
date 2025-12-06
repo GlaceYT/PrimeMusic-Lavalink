@@ -93,12 +93,12 @@ module.exports = {
   spotifyClientId: "your_spotify_client_id", // Optional
   spotifyClientSecret: "your_spotify_client_secret", // Optional
   nodes: [
-    {
-      name: "NodeName",
-      password: "your_lavalink_password",
-      host: "your_lavalink_host",
-      port: 2333,
-      secure: false // true for wss/https
+     {
+            name: "GlceYT",
+            password: "glace",
+            host: "us-01.strixnodes.com",
+            port: 8003,
+            secure: false
     }
   ]
 }
