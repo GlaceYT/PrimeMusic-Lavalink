@@ -63,7 +63,6 @@ class LavalinkNodeManager {
                 password: node.password,
                 port: node.port,
                 secure: !!node.secure,
-                // Deterministic id so riffy node names match our map keys
                 name: node.id,
                 displayName: node.displayName || node.name || node.id
             }));
@@ -82,13 +81,13 @@ class LavalinkNodeManager {
 
             this.setupEventListeners();
             this.startHealthMonitoring();
-            this.startConnectLoop(); // continuously try until a node connects
+            this.startConnectLoop(); 
             this.initialized = true;
 
             const lang = getLangSync();
             console.log(`${colors.cyan}[ LAVALINK ][Riffy]${colors.reset} ${colors.green}${lang.console?.lavalink?.riffyInitialized?.replace('{count}', nodesToUse.length) || `Initialized with ${nodesToUse.length} node(s)`}${colors.reset}`);
 
-            // Debug: show riffy node keys to verify identifier alignment
+         
             setTimeout(() => {
                 try {
                     let keys = [];
@@ -165,7 +164,7 @@ class LavalinkNodeManager {
             }
         }
 
-        // Fallback: re-init to pick up online nodes
+  
         try {
             await this.refreshRiffy();
             return true;
@@ -174,7 +173,7 @@ class LavalinkNodeManager {
         }
     }
 
-    // Force reconnect attempts on all riffy nodes that are disconnected
+  
     async forceConnectAllNodes() {
         if (!this.riffy) return false;
         let attempted = false;
@@ -226,9 +225,9 @@ class LavalinkNodeManager {
                 if (this.hasConnectedNodes()) return;
                 await this.reconnectNodesNow(5000);
             } catch (_) {
-                // ignore loop errors
+            
             }
-        }, 5000); // every 5 seconds for faster recovery
+        }, 10000); 
     }
 
     async reconnectNodesNow(maxWaitTime = 8000) {
@@ -238,7 +237,7 @@ class LavalinkNodeManager {
         const start = Date.now();
         while (Date.now() - start < maxWaitTime) {
             if (this.hasConnectedNodes()) return true;
-            // Also wait for a nodeConnect event if one fires
+       
             const eventConnected = await Promise.race([
                 this.waitForNodeConnectEvent(800),
                 new Promise(res => setTimeout(() => res(false), 800))
@@ -252,7 +251,7 @@ class LavalinkNodeManager {
     async refreshRiffy() {
         try {
             if (this.hasConnectedNodes()) {
-                // Already connected; no need to re-init
+     
                 return true;
             }
             if (this.riffy && typeof this.riffy.destroy === 'function') {
@@ -313,6 +312,15 @@ class LavalinkNodeManager {
             const nodeId = this.findNodeIdByName(node.name);
             if (nodeId) {
                 const status = this.nodeStatus.get(nodeId) || {};
+                const msg = error?.message || '';
+                
+         
+                if (msg.includes('player.restart is not a function') || msg.includes('restart is not a function')) {
+                    const lang = getLangSync();
+                    console.warn(`${colors.cyan}[ LAVALINK ][NODE ]${colors.reset} ${colors.yellow}Ignoring Riffy reconnect bug for ${node.name} - node will reconnect automatically${colors.reset}`);
+                    return; 
+                }
+                
                 this.nodeStatus.set(nodeId, {
                     ...status,
                     online: false,
@@ -321,7 +329,7 @@ class LavalinkNodeManager {
                 });
                 const availableCount = this.getConnectedNodeCount();
                 const totalCount = this.getTotalNodeCount();
-                const msg = error?.message || '';
+                
                 if (msg.includes('after 3 attempts')) {
                     const lang = getLangSync();
                     console.warn(`${colors.cyan}[ LAVALINK ][NODE ]${colors.reset} ${colors.yellow}${lang.console?.lavalink?.retryLimitReported?.replace('{name}', node.name) || `Retry limit reported by ${node.name}; reconnect loop continues`}${colors.reset}`);
@@ -383,9 +391,9 @@ class LavalinkNodeManager {
                 }
             }
         } catch (error) {
-            // Ignore errors
+        
         }
-        // Fallback: use nodeStatus map if Riffy state is stale
+
         if (count === 0) {
             for (const status of this.nodeStatus.values()) {
                 if (status.online) count++;
@@ -398,7 +406,7 @@ class LavalinkNodeManager {
         return this.nodes.size;
     }
 
-    // Backwards-compatible alias used by commands/bot logging
+
     getNodeCount() {
         return this.getConnectedNodeCount();
     }
@@ -473,7 +481,7 @@ class LavalinkNodeManager {
     }
 
     async ensureNodeAvailable() {
-        // Fast path
+    
         if (this.hasConnectedNodes()) return true;
 
         const lang = getLangSync();
@@ -492,7 +500,7 @@ class LavalinkNodeManager {
     }
 
     startHealthMonitoring() {
-        // Passive status log every 30s
+   
         this.healthCheckInterval = setInterval(async () => {
             const connected = this.getConnectedNodeCount();
             const total = this.getTotalNodeCount();
@@ -501,16 +509,16 @@ class LavalinkNodeManager {
                 console.log(`${colors.cyan}[ LAVALINK ][STATUS]${colors.reset} ${colors.yellow}${lang.console?.lavalink?.noNodesConnected?.replace('{connected}', connected).replace('{total}', total) || `No nodes connected (${connected}/${total}) — attempting reconnect...`}${colors.reset}`);
                 await this.reconnectNodesNow(5000);
             }
-        }, 30000);
+        }, 60000); 
 
-        // Active reconnect sweep every 10s when nothing is connected
+  
         this.reconnectInterval = setInterval(async () => {
             const connected = this.getConnectedNodeCount();
             const total = this.getTotalNodeCount();
             if (connected === 0 && total > 0) {
                 await this.reconnectNodesNow(5000);
             }
-        }, 10000);
+        }, 30000); 
 
         // Initial status log
         setTimeout(() => {

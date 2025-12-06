@@ -183,8 +183,19 @@ async function initializePlayer(client) {
             let attachment = null;
 
             if (config.generateSongCard !== false) {
+                // Extract YouTube ID from track URI for better thumbnail fetching
+                let thumbnailURL = track.info.thumbnail || '';
+                const trackUri = track.info.uri || '';
+                
+                // If thumbnail is missing or invalid, try to extract from URI
+                if ((!thumbnailURL || !thumbnailURL.startsWith('http')) && trackUri) {
+                    // Pass the URI so we can extract YouTube ID from it
+                    thumbnailURL = trackUri;
+                }
+                
                 const cardBuffer = await musicCard.generateCard({
-                    thumbnailURL: track.info.thumbnail || '',
+                    thumbnailURL: thumbnailURL,
+                    trackURI: trackUri, // Pass URI separately for YouTube ID extraction
                     songTitle: track.info.title,
                     songArtist: track.info.author || 'Unknown Artist',
                     trackRequester: requester,
@@ -827,6 +838,7 @@ function createProgressBar(current, total, length = 20) {
 }
 
 async function startProgressUpdates(client, guildId, message, player, track) {
+    let updateCount = 0;
     const updateInterval = setInterval(async () => {
         try {
             const currentPlayer = client.riffy.players.get(guildId);
@@ -923,9 +935,22 @@ async function startProgressUpdates(client, guildId, message, player, track) {
                 const msg = await channel.messages.fetch(stored.messageId).catch(() => null);
                 if (msg) {
                     try {
-                        if (config.generateSongCard !== false) {
+                        // Only regenerate card on first update or every 6th update (every 90 seconds) to save memory
+                        const shouldRegenerateCard = config.generateSongCard !== false && (updateCount === 0 || updateCount % 6 === 0);
+                        
+                        if (shouldRegenerateCard) {
+                            // Extract YouTube ID from track URI for better thumbnail fetching
+                            let thumbnailURL = track.info.thumbnail || '';
+                            const trackUri = track.info.uri || '';
+                            
+                            // If thumbnail is missing or invalid, try to extract from URI
+                            if ((!thumbnailURL || !thumbnailURL.startsWith('http')) && trackUri) {
+                                thumbnailURL = trackUri;
+                            }
+                            
                             const cardBuffer = await musicCard.generateCard({
-                                thumbnailURL: track.info.thumbnail || '',
+                                thumbnailURL: thumbnailURL,
+                                trackURI: trackUri, // Pass URI separately for YouTube ID extraction
                                 songTitle: track.info.title,
                                 songArtist: track.info.author || 'Unknown Artist',
                                 trackRequester: requesters.get(track.info.uri) || 'Unknown',
@@ -939,11 +964,13 @@ async function startProgressUpdates(client, guildId, message, player, track) {
                                 flags: MessageFlags.IsComponentsV2
                             });
                         } else {
+                            // Just update text without regenerating card to save memory/CPU
                             await msg.edit({ 
                                 components: [...components, actionRow1, actionRow2],
                                 flags: MessageFlags.IsComponentsV2
                             });
                         }
+                        updateCount++;
                     } catch (cardError) {
                         await msg.edit({ 
                             components: [...components, actionRow1, actionRow2],
@@ -957,7 +984,7 @@ async function startProgressUpdates(client, guildId, message, player, track) {
             progressUpdateIntervals.delete(guildId);
             nowPlayingMessages.delete(guildId);
         }
-    }, 5000);
+    }, 15000); // Increased from 5000ms to 15000ms (15 seconds) to reduce CPU/memory usage
     
     return updateInterval;
 }

@@ -30,35 +30,45 @@ function tryExtractYouTubeId(url) {
     return null;
 }
 
-async function fetchImageBuffer(url, timeout = 7000) {
-    const resp = await axios.get(url, {
-        responseType: 'arraybuffer',
-        timeout,
-        headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        },
-        validateStatus: status => status >= 200 && status < 400
-    });
-    return Buffer.from(resp.data);
+async function fetchImageBuffer(url, timeout = 3000) {
+    try {
+        const resp = await axios.get(url, {
+            responseType: 'arraybuffer',
+            timeout,
+            maxContentLength: 5 * 1024 * 1024, // 5MB max
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            },
+            validateStatus: status => status >= 200 && status < 400
+        });
+        return Buffer.from(resp.data);
+    } catch (error) {
+        return null;
+    }
 }
 
-async function cachedFetchImage(url, cacheDir = path.join(__dirname, '../tmp/thumbcache')) {
-    await fs.mkdir(cacheDir, { recursive: true });
-    const hash = crypto.createHash('md5').update(url).digest('hex');
-    const cachePath = path.join(cacheDir, hash + (path.extname(url).split('?')[0] || '.jpg'));
+async function getYouTubeThumbnail(videoId) {
+    if (!videoId) return null;
     
-    try {
-        const stat = await fs.stat(cachePath);
-        const ttl = 24 * 3600 * 1000;
-        if ((Date.now() - stat.mtimeMs) < ttl) {
-            return await fs.readFile(cachePath);
+    // Try smaller thumbnails first (faster, less memory)
+    const candidates = [
+        `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`,  // Medium quality (faster)
+        `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,  // High quality fallback
+        `https://i.ytimg.com/vi/${videoId}/sddefault.jpg`,  // Standard definition
+    ];
+    
+    for (const url of candidates) {
+        try {
+            const buffer = await fetchImageBuffer(url, 2000); // 2 second timeout
+            if (buffer && buffer.length > 5000) { // At least 5KB
+                return buffer;
+            }
+        } catch (err) {
+            continue;
         }
-    } catch (e) {
     }
     
-    const buf = await fetchImageBuffer(url);
-    fs.writeFile(cachePath, buf).catch(() => {});
-    return buf;
+    return null;
 }
 
 class EnhancedMusicCard {
@@ -67,6 +77,7 @@ class EnhancedMusicCard {
             width: 900,
             height: 300,
             thumbnailURL: options.thumbnailURL || '',
+            trackURI: options.trackURI || options.thumbnailURL || '', // Track URI for YouTube ID extraction
             songTitle: options.songTitle || 'Unknown Track',
             songArtist: options.songArtist || 'Unknown Artist',
             trackRequester: options.trackRequester || 'Unknown',
@@ -174,115 +185,180 @@ class EnhancedMusicCard {
         const radius = 18;
         const borderWidth = 4;
         
-        let thumbCandidates = [config.thumbnailURL].filter(Boolean);
-        const ytId = tryExtractYouTubeId(config.thumbnailURL);
-        if (ytId) {
-            thumbCandidates = youtubeThumbCandidates(ytId).concat(thumbCandidates);
+        // Try to extract YouTube ID from track URI first (most reliable)
+        let ytId = tryExtractYouTubeId(config.trackURI);
+        
+        // Fallback: try thumbnail URL
+        if (!ytId) {
+            ytId = tryExtractYouTubeId(config.thumbnailURL);
         }
         
         let buffer = null;
-        let successfulUrl = null;
         
-        for (const url of thumbCandidates) {
-            if (!url) continue;
+        // Try to get YouTube thumbnail directly (simpler, faster, more reliable)
+        if (ytId) {
+            buffer = await getYouTubeThumbnail(ytId);
+        }
+        
+        // Fallback: try original thumbnail URL if YouTube method failed
+        if (!buffer && config.thumbnailURL && config.thumbnailURL.startsWith('http')) {
             try {
-                buffer = await cachedFetchImage(url);
-                if (buffer && buffer.length > 1000) {
-                    successfulUrl = url;
-                    break;
-                }
+                buffer = await fetchImageBuffer(config.thumbnailURL, 2000);
             } catch (err) {
+                // Ignore errors, will use placeholder
             }
         }
         
-        if (!buffer) {
-            return this.drawThumbnailPlaceholder(ctx, thumbnailX, thumbnailY, thumbnailSize, radius);
+        // If we got a buffer, try to load and draw it
+        if (buffer && buffer.length > 5000) {
+            try {
+                const img = await loadImage(buffer);
+                ctx.save();
+                
+                const srcW = img.width;
+                const srcH = img.height;
+                const destW = thumbnailSize;
+                const destH = thumbnailSize;
+                
+                const scaleX = destW / srcW;
+                const scaleY = destH / srcH;
+                const scale = Math.max(scaleX, scaleY);
+                
+                const scaledSrcW = destW / scale;
+                const scaledSrcH = destH / scale;
+                
+                const sw = Math.min(srcW, scaledSrcW);
+                const sh = Math.min(srcH, scaledSrcH);
+                
+                const sx = Math.floor(Math.max(0, (srcW - sw) / 2));
+                const sy = Math.floor(Math.max(0, (srcH - sh) / 2));
+                
+                ctx.beginPath();
+                ctx.roundRect(thumbnailX, thumbnailY, thumbnailSize, thumbnailSize, radius);
+                ctx.clip();
+                
+                ctx.drawImage(img, sx, sy, sw, sh, thumbnailX, thumbnailY, destW, destH);
+                ctx.restore();
+                
+                ctx.save();
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+                ctx.shadowBlur = 10;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 3;
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+                ctx.lineWidth = borderWidth;
+                ctx.beginPath();
+                ctx.roundRect(thumbnailX, thumbnailY, thumbnailSize, thumbnailSize, radius);
+                ctx.stroke();
+                
+                ctx.shadowColor = 'rgba(255, 255, 255, 0.2)';
+                ctx.shadowBlur = 6;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 0;
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.roundRect(
+                    thumbnailX + borderWidth / 2,
+                    thumbnailY + borderWidth / 2,
+                    thumbnailSize - borderWidth,
+                    thumbnailSize - borderWidth,
+                    radius - 1
+                );
+                ctx.stroke();
+                ctx.restore();
+                
+                return; // Successfully drew thumbnail
+            } catch (err) {
+                // Fall through to placeholder
+            }
         }
         
-        try {
-            const img = await loadImage(buffer);
-            ctx.save();
-            
-            const srcW = img.width;
-            const srcH = img.height;
-            const destW = thumbnailSize;
-            const destH = thumbnailSize;
-            
-            const scaleX = destW / srcW;
-            const scaleY = destH / srcH;
-            const scale = Math.max(scaleX, scaleY);
-            
-            const scaledSrcW = destW / scale;
-            const scaledSrcH = destH / scale;
-            
-            const sw = Math.min(srcW, scaledSrcW);
-            const sh = Math.min(srcH, scaledSrcH);
-            
-            const sx = Math.floor(Math.max(0, (srcW - sw) / 2));
-            const sy = Math.floor(Math.max(0, (srcH - sh) / 2));
-            
-            ctx.beginPath();
-            ctx.roundRect(thumbnailX, thumbnailY, thumbnailSize, thumbnailSize, radius);
-            ctx.clip();
-            
-            ctx.drawImage(img, sx, sy, sw, sh, thumbnailX, thumbnailY, destW, destH);
-            ctx.restore();
-            
-            ctx.save();
-            ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
-            ctx.shadowBlur = 10;
-            ctx.shadowOffsetX = 0;
-            ctx.shadowOffsetY = 3;
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-            ctx.lineWidth = borderWidth;
-            ctx.beginPath();
-            ctx.roundRect(thumbnailX, thumbnailY, thumbnailSize, thumbnailSize, radius);
-            ctx.stroke();
-            
-            ctx.shadowColor = 'rgba(255, 255, 255, 0.2)';
-            ctx.shadowBlur = 6;
-            ctx.shadowOffsetX = 0;
-            ctx.shadowOffsetY = 0;
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-            ctx.lineWidth = 1.5;
-            ctx.beginPath();
-            ctx.roundRect(
-                thumbnailX + borderWidth / 2,
-                thumbnailY + borderWidth / 2,
-                thumbnailSize - borderWidth,
-                thumbnailSize - borderWidth,
-                radius - 1
-            );
-            ctx.stroke();
-            ctx.restore();
-            
-        } catch (err) {
-            return this.drawThumbnailPlaceholder(ctx, thumbnailX, thumbnailY, thumbnailSize, radius);
-        }
+        // Draw beautiful music icon placeholder
+        return this.drawThumbnailPlaceholder(ctx, thumbnailX, thumbnailY, thumbnailSize, radius);
     }
 
     drawThumbnailPlaceholder(ctx, x, y, size, radius = 18) {
         ctx.save();
         
-        // Background
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+        // Beautiful gradient background
+        const gradient = ctx.createLinearGradient(x, y, x + size, y + size);
+        gradient.addColorStop(0, 'rgba(59, 130, 246, 0.3)');  // Blue
+        gradient.addColorStop(0.5, 'rgba(147, 51, 234, 0.3)'); // Purple
+        gradient.addColorStop(1, 'rgba(236, 72, 153, 0.3)');   // Pink
+        
+        ctx.fillStyle = gradient;
         ctx.beginPath();
         ctx.roundRect(x, y, size, size, radius);
         ctx.fill();
         
-        // Border
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-        ctx.lineWidth = 2;
+        // Subtle inner glow
+        const innerGradient = ctx.createRadialGradient(
+            x + size/2, y + size/2, 0,
+            x + size/2, y + size/2, size/2
+        );
+        innerGradient.addColorStop(0, 'rgba(255, 255, 255, 0.1)');
+        innerGradient.addColorStop(1, 'rgba(0, 0, 0, 0.2)');
+        ctx.fillStyle = innerGradient;
+        ctx.beginPath();
+        ctx.roundRect(x, y, size, size, radius);
+        ctx.fill();
+        
+        // Elegant border with glow
+        ctx.shadowColor = 'rgba(96, 165, 250, 0.5)';
+        ctx.shadowBlur = 15;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+        ctx.lineWidth = 3;
         ctx.beginPath();
         ctx.roundRect(x, y, size, size, radius);
         ctx.stroke();
         
-        // Icon
+        // Reset shadow for icon
+        ctx.shadowColor = 'transparent';
+        
+        // Draw music note icon (more professional than emoji)
+        const iconSize = size * 0.4;
+        const iconX = x + size/2;
+        const iconY = y + size/2;
+        
+        ctx.strokeStyle = '#FFFFFF';
         ctx.fillStyle = '#FFFFFF';
-        ctx.font = `${size * 0.25}px Poppins, Segoe UI, Helvetica Neue, Arial, sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('🎵', x + size/2, y + size/2);
+        ctx.lineWidth = Math.max(3, size * 0.02);
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        
+        // Draw music note
+        ctx.beginPath();
+        // Note head (circle)
+        ctx.arc(iconX - iconSize * 0.15, iconY - iconSize * 0.1, iconSize * 0.12, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Note stem
+        ctx.beginPath();
+        ctx.moveTo(iconX - iconSize * 0.15, iconY - iconSize * 0.22);
+        ctx.lineTo(iconX - iconSize * 0.15, iconY + iconSize * 0.3);
+        ctx.stroke();
+        
+        // Note flag
+        ctx.beginPath();
+        ctx.moveTo(iconX - iconSize * 0.15, iconY + iconSize * 0.3);
+        ctx.quadraticCurveTo(
+            iconX - iconSize * 0.1, iconY + iconSize * 0.25,
+            iconX + iconSize * 0.1, iconY + iconSize * 0.2
+        );
+        ctx.quadraticCurveTo(
+            iconX + iconSize * 0.15, iconY + iconSize * 0.15,
+            iconX + iconSize * 0.1, iconY + iconSize * 0.1
+        );
+        ctx.stroke();
+        
+        // Add subtle shine effect
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.beginPath();
+        ctx.arc(iconX - iconSize * 0.15, iconY - iconSize * 0.1, iconSize * 0.08, 0, Math.PI * 2);
+        ctx.fill();
         
         ctx.restore();
     }
@@ -435,4 +511,5 @@ class EnhancedMusicCard {
 }
 
 module.exports = { EnhancedMusicCard };
+
 

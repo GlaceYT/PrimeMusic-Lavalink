@@ -15,8 +15,10 @@ module.exports = {
   SupportServer: "https://discord.gg/xQF9f9yUEM",
   embedTimeout: 5,
   showProgressBar: false,  // Show progress bar in track embed
-  showVisualizer: false,  // Show visualizer on music card
+  showVisualizer: false,  // Show visualizer on music card (disabled for low-memory optimization)
   generateSongCard: true,  // custom song card image, if false uses thumbnail
+  // Performance optimizations for low-memory environments (512MB RAM)
+  lowMemoryMode: true,  // Enable optimizations for low-memory hosting
   errorLog: "", 
   nodes: [
      {

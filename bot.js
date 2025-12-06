@@ -23,8 +23,14 @@ process.on('unhandledRejection', (error) => {
     if (error && error.message && (
         error.message.includes('Cannot read properties of null') ||
         error.message.includes('track.info') ||
-        error.message.includes('thumbnail')
+        error.message.includes('thumbnail') ||
+        error.message.includes('player.restart is not a function') ||
+        error.message.includes('restart is not a function')
     )) {
+   
+        if (error.message.includes('player.restart') || error.message.includes('restart is not a function')) {
+            console.warn(`${colors.cyan}[ LAVALINK ]${colors.reset} ${colors.yellow}Ignoring Riffy reconnect bug: ${error.message}${colors.reset}`);
+        }
         return;
     }
     console.error(lang.console?.bot?.unhandledRejection || 'Unhandled Rejection:', error);
