@@ -33,6 +33,21 @@ process.on('unhandledRejection', (error) => {
         }
         return;
     }
+    
+    // timeout errors
+    if (error && (error.cause || error.message)) {
+        const cause = error.cause || {};
+        const errorMsg = error.message || '';
+        
+        if (cause.code === 'UND_ERR_CONNECT_TIMEOUT' || 
+            errorMsg.includes('Connect Timeout') || 
+            errorMsg.includes('fetch failed') ||
+            errorMsg.includes('ConnectTimeoutError')) {
+            console.warn(`${colors.cyan}[ LAVALINK ]${colors.reset} ${colors.yellow}Connection timeout to Lavalink node - will retry automatically${colors.reset}`);
+            return; 
+        }
+    }
+    
     console.error(lang.console?.bot?.unhandledRejection || 'Unhandled Rejection:', error);
 });
 
