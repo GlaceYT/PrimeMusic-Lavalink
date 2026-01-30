@@ -9,7 +9,7 @@
 ![Node](https://img.shields.io/badge/node-%3E%3D16.0.0-brightgreen.svg)
 ![Discord.js](https://img.shields.io/badge/discord.js-14.25.1-blue.svg)
 
-**A customized version of BedrockConnect with a locked, admin-controlled server list.**
+**A feature-rich, high-performance Discord music bot built with Lavalink and Discord.js v2 Components**
 
 ---
 
