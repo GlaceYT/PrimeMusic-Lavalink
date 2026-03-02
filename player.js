@@ -1,12 +1,10 @@
 const { Riffy, Player } = require("riffy");
-const { ContainerBuilder, SeparatorBuilder, SeparatorSpacingSize, SectionBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder, PermissionsBitField, MessageFlags, MediaGalleryBuilder, MediaGalleryItemBuilder } = require("discord.js");
+const { ContainerBuilder, SeparatorBuilder, SeparatorSpacingSize, SectionBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder, PermissionsBitField, MessageFlags, MediaGalleryBuilder } = require("discord.js");
 const { requesters } = require("./commands/music/play");
 const { EnhancedMusicCard } = require("./utils/musicCard");
 const config = require("./config.js");
 const musicIcons = require('./UI/icons/musicicons.js');
 const colors = require('./UI/colors/colors');
-const fs = require("fs").promises;
-const path = require("path");
 const axios = require('axios');
 const { autoplayCollection, playlistCollection } = require('./mongodb.js');
 const { initializeLavalinkManager, getLavalinkManager } = require('./lavalink.js');
@@ -24,30 +22,63 @@ const guildTrackMessages = new Map();
 const nowPlayingMessages = new Map();
 const progressUpdateIntervals = new Map();
 const musicCard = new EnhancedMusicCard();
+const useGeneratedSongCard = config.generateSongCard !== false;
+
+function stripMediaGallery(components = []) {
+    return components.filter((component) => !(component instanceof MediaGalleryBuilder));
+}
 
 async function sendMessageWithPermissionsCheck(channel, components, attachment, actionRow1, actionRow2) {
     try {
         const permissions = channel.permissionsFor(channel.guild.members.me);
+        const needsAttachPermission = !!attachment;
         if (!permissions.has(PermissionsBitField.Flags.SendMessages) ||
-            !permissions.has(PermissionsBitField.Flags.EmbedLinks) ||
-            !permissions.has(PermissionsBitField.Flags.AttachFiles) ||
-            !permissions.has(PermissionsBitField.Flags.UseExternalEmojis)) {
+            !permissions.has(PermissionsBitField.Flags.EmbedLinks)) {
             const lang = getLangSync();
             console.error(lang.console?.player?.lacksPermissions || "Bot lacks necessary permissions to send messages in this channel.");
             return;
         }
 
+        // If file attachments are not allowed, gracefully drop card media and still send controls.
+        let safeComponents = components;
+        let safeAttachment = attachment;
+        if (needsAttachPermission && !permissions.has(PermissionsBitField.Flags.AttachFiles)) {
+            safeComponents = stripMediaGallery(components);
+            safeAttachment = null;
+        }
+
         const messageOptions = {
-            components: [...components, actionRow1, actionRow2],
+            components: [...safeComponents, actionRow1, actionRow2],
             flags: MessageFlags.IsComponentsV2
         };
         
-        if (attachment) {
-            messageOptions.files = [attachment];
+        if (safeAttachment) {
+            messageOptions.files = [safeAttachment];
         }
         
-        const message = await channel.send(messageOptions);
-        return message;
+        try {
+            const message = await channel.send(messageOptions);
+            return message;
+        } catch (sendError) {
+            // Fallback: remove media gallery/attachments and still send core controls/embed.
+            const fallbackComponents = stripMediaGallery(components);
+            const fallbackOptions = {
+                components: [...fallbackComponents, actionRow1, actionRow2],
+                flags: MessageFlags.IsComponentsV2
+            };
+            try {
+                const message = await channel.send(fallbackOptions);
+                return message;
+            } catch (_) {
+             
+                const minimalOptions = {
+                    components: [actionRow1, actionRow2],
+                    flags: MessageFlags.IsComponentsV2
+                };
+                const message = await channel.send(minimalOptions);
+                return message;
+            }
+        }
     } catch (error) {
         const langSync = getLangSync();
         console.error(langSync.console?.player?.errorSendingMessage?.replace('{message}', error.message) || "Error sending message:", error.message);
@@ -79,7 +110,7 @@ async function initializePlayer(client) {
         const errorMsg = error?.message || 'Unknown error';
         const isTimeout = errorMsg.includes('timeout') || errorMsg.includes('Read timed out') || errorMsg.includes('SocketTimeoutException');
         
-        // Log timeout errors as warnings (they're common on slow connections)
+      
         if (isTimeout) {
             console.warn(`${colors.cyan}[ LAVALINK ]${colors.reset} ${colors.yellow}Track timeout for guild ${player?.guildId || 'unknown'}: ${errorMsg}${colors.reset}`);
         } else {
@@ -215,7 +246,7 @@ async function initializePlayer(client) {
             const components = [];
             let attachment = null;
 
-            if (config.generateSongCard !== false) {
+            if (useGeneratedSongCard) {
                 // Extract YouTube ID from track URI for better thumbnail fetching
                 let thumbnailURL = track.info.thumbnail || '';
                 const trackUri = track.info.uri || '';
@@ -226,20 +257,25 @@ async function initializePlayer(client) {
                     thumbnailURL = trackUri;
                 }
                 
-                const cardBuffer = await musicCard.generateCard({
-                    thumbnailURL: thumbnailURL,
-                    trackURI: trackUri, // Pass URI separately for YouTube ID extraction
-                    songTitle: track.info.title,
-                    songArtist: track.info.author || 'Unknown Artist',
-                    trackRequester: requester,
-                    isPlaying: true,
-                    showVisualizer: config.showVisualizer !== false,
-                });
-
-                const cardPath = path.join(__dirname, 'musicard.png');
-                await fs.writeFile(cardPath, cardBuffer);
-
-                attachment = new AttachmentBuilder(cardBuffer, { name: 'song-banner.png' });
+                try {
+                    const cardBuffer = await musicCard.generateCard({
+                        thumbnailURL: thumbnailURL,
+                        trackURI: trackUri, // Pass URI separately for YouTube ID extraction
+                        songTitle: track.info.title,
+                        songArtist: track.info.author || 'Unknown Artist',
+                        trackRequester: requester,
+                        isPlaying: true,
+                        showVisualizer: config.showVisualizer !== false,
+                        currentPositionMs: 0,
+                        totalDurationMs: track.info.length || 0,
+                    });
+                    if (cardBuffer && cardBuffer.length > 0) {
+                        attachment = new AttachmentBuilder(cardBuffer, { name: 'song-banner.png' });
+                    }
+                } catch (error) {
+                    const langSync = getLangSync();
+                    console.warn(langSync.console?.player?.errorMusicCard?.replace('{message}', error.message) || `Music card render failed, sending embed without card: ${error.message}`);
+                }
             }
 
             const headerSection = new SectionBuilder()
@@ -272,7 +308,7 @@ async function initializePlayer(client) {
             components.push(controlsContainer);
             components.push(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large));
 
-            if (config.generateSongCard !== false) {
+            if (attachment) {
                 const mediaGallery = new MediaGalleryBuilder()
                     .addItems(
                         (mediaItem) => mediaItem
@@ -280,20 +316,6 @@ async function initializePlayer(client) {
                             .setDescription(`${track.info?.title || 'Unknown Title'} - ${track.info?.author || 'Unknown Artist'}`)
                     );
                 components.push(mediaGallery);
-            } else if (track.info?.thumbnail && typeof track.info.thumbnail === 'string' && track.info.thumbnail.trim() !== '' && track.info.thumbnail.startsWith('http')) {
-                try {
-                    const description = `${track.info?.title || 'Unknown Title'} - ${track.info?.author || 'Unknown Artist'}`;
-                    const mediaGallery = new MediaGalleryBuilder()
-                        .addItems(
-                            (mediaItem) => mediaItem
-                                .setURL(track.info.thumbnail)
-                                .setDescription(description)
-                        );
-                    components.push(mediaGallery);
-                } catch (error) {
-                    const langSync = getLangSync();
-                    console.warn(langSync.console?.player?.errorMediaGallery || `Failed to create media gallery: ${error.message}`);
-                }
             }
 
             const actionRow1 = createActionRow1(false);
@@ -323,7 +345,9 @@ async function initializePlayer(client) {
             });
 
             const intervalId = startProgressUpdates(client, guildId, message, player, track);
-            progressUpdateIntervals.set(guildId, intervalId);
+            if (intervalId) {
+                progressUpdateIntervals.set(guildId, intervalId);
+            }
 
             const collector = setupCollector(client, player, channel, message);
 
@@ -891,6 +915,11 @@ function createProgressBar(current, total, length = 20) {
 }
 
 async function startProgressUpdates(client, guildId, message, player, track) {
+    if (config.lowMemoryMode === true) {
+        // Keep the original now-playing card untouched in low-memory mode.
+        return null;
+    }
+
     let updateCount = 0;
     const updateInterval = setInterval(async () => {
         try {
@@ -962,24 +991,6 @@ async function startProgressUpdates(client, guildId, message, player, track) {
             components.push(controlsContainer);
             components.push(new SeparatorBuilder().setSpacing(SeparatorSpacingSize.Large));
 
-            if (config.generateSongCard !== false) {
-                const mediaGallery = new MediaGalleryBuilder()
-                    .addItems(
-                        (mediaItem) => mediaItem
-                            .setURL('attachment://song-banner.png')
-                            .setDescription(`${track.info.title} - ${track.info.author || 'Unknown Artist'}`)
-                    );
-                components.push(mediaGallery);
-            } else if (track.info?.thumbnail && typeof track.info.thumbnail === 'string' && track.info.thumbnail.trim() !== '' && track.info.thumbnail.startsWith('http')) {
-                const mediaGallery = new MediaGalleryBuilder()
-                    .addItems(
-                        (mediaItem) => mediaItem
-                            .setURL(track.info.thumbnail)
-                            .setDescription(`${track.info.title} - ${track.info.author || 'Unknown Artist'}`)
-                    );
-                components.push(mediaGallery);
-            }
-
             const actionRow1 = createActionRow1(false);
             const actionRow2 = createActionRow2(false);
 
@@ -988,47 +999,91 @@ async function startProgressUpdates(client, guildId, message, player, track) {
                 const msg = await channel.messages.fetch(stored.messageId).catch(() => null);
                 if (msg) {
                     try {
-                        // Only regenerate card on first update or every 6th update (every 90 seconds) to save memory
-                        const shouldRegenerateCard = config.generateSongCard !== false && (updateCount === 0 || updateCount % 6 === 0);
+
+                        const shouldRegenerateCard = useGeneratedSongCard &&
+                            config.lowMemoryMode !== true;
                         
                         if (shouldRegenerateCard) {
-                            // Extract YouTube ID from track URI for better thumbnail fetching
+             
                             let thumbnailURL = track.info.thumbnail || '';
                             const trackUri = track.info.uri || '';
                             
-                            // If thumbnail is missing or invalid, try to extract from URI
+                        
                             if ((!thumbnailURL || !thumbnailURL.startsWith('http')) && trackUri) {
                                 thumbnailURL = trackUri;
                             }
                             
                             const cardBuffer = await musicCard.generateCard({
                                 thumbnailURL: thumbnailURL,
-                                trackURI: trackUri, // Pass URI separately for YouTube ID extraction
+                                trackURI: trackUri, 
                                 songTitle: track.info.title,
                                 songArtist: track.info.author || 'Unknown Artist',
                                 trackRequester: requesters.get(track.info.uri) || 'Unknown',
                                 isPlaying: true,
                                 showVisualizer: config.showVisualizer !== false,
+                                currentPositionMs: Math.max(0, player.position || 0),
+                                totalDurationMs: track.info.length || 0,
                             });
                             const attachment = new AttachmentBuilder(cardBuffer, { name: 'song-banner.png' });
+                            const mediaGallery = new MediaGalleryBuilder()
+                                .addItems(
+                                    (mediaItem) => mediaItem
+                                        .setURL('attachment://song-banner.png')
+                                        .setDescription(`${track.info.title} - ${track.info.author || 'Unknown Artist'}`)
+                                );
+                            const editComponents = [...components, mediaGallery];
                             await msg.edit({ 
-                                components: [...components, actionRow1, actionRow2], 
+                                components: [...editComponents, actionRow1, actionRow2], 
                                 files: [attachment],
                                 flags: MessageFlags.IsComponentsV2
                             });
                         } else {
-                            // Just update text without regenerating card to save memory/CPU
+                       
+                            const editComponents = [...components];
+                            if (useGeneratedSongCard) {
+                                const existingCardUrl = msg.attachments?.first?.()?.url;
+                                if (existingCardUrl) {
+                                    const mediaGallery = new MediaGalleryBuilder()
+                                        .addItems(
+                                            (mediaItem) => mediaItem
+                                                .setURL(existingCardUrl)
+                                                .setDescription(`${track.info.title} - ${track.info.author || 'Unknown Artist'}`)
+                                        );
+                                    editComponents.push(mediaGallery);
+                                }
+                            }
                             await msg.edit({ 
-                                components: [...components, actionRow1, actionRow2],
+                                components: [...editComponents, actionRow1, actionRow2],
                                 flags: MessageFlags.IsComponentsV2
                             });
                         }
                         updateCount++;
                     } catch (cardError) {
-                        await msg.edit({ 
-                            components: [...components, actionRow1, actionRow2],
-                            flags: MessageFlags.IsComponentsV2
-                        });
+                        try {
+                            const editComponents = [...components];
+                            if (useGeneratedSongCard) {
+                                const existingCardUrl = msg.attachments?.first?.()?.url;
+                                if (existingCardUrl) {
+                                    const mediaGallery = new MediaGalleryBuilder()
+                                        .addItems(
+                                            (mediaItem) => mediaItem
+                                                .setURL(existingCardUrl)
+                                                .setDescription(`${track.info.title} - ${track.info.author || 'Unknown Artist'}`)
+                                        );
+                                    editComponents.push(mediaGallery);
+                                }
+                            }
+                            await msg.edit({
+                                components: [...editComponents, actionRow1, actionRow2],
+                                flags: MessageFlags.IsComponentsV2
+                            });
+                        } catch (_) {
+                            // Final fallback: keep message alive with base components only.
+                            await msg.edit({
+                                components: [...components, actionRow1, actionRow2],
+                                flags: MessageFlags.IsComponentsV2
+                            }).catch(() => {});
+                        }
                     }
                 }
             }
@@ -1037,7 +1092,7 @@ async function startProgressUpdates(client, guildId, message, player, track) {
             progressUpdateIntervals.delete(guildId);
             nowPlayingMessages.delete(guildId);
         }
-    }, 15000); // Increased from 5000ms to 15000ms (15 seconds) to reduce CPU/memory usage
+    }, 15000); // 5000ms to 15000ms (15 seconds) to reduce CPU/memory usage
     
     return updateInterval;
 }
