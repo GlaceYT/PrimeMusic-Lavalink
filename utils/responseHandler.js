@@ -8,6 +8,25 @@ function getEmbedColor(color) {
     return parseInt(config.embedColor?.replace('#', '') || '1db954', 16);
 }
 
+function scheduleReplyDeletion(interaction, reply, deleteAfter) {
+    if (!(deleteAfter > 0)) return;
+
+    setTimeout(async () => {
+        try {
+            if (interaction && (interaction.deferred || interaction.replied)) {
+                await interaction.deleteReply();
+                return;
+            }
+        } catch (_) {
+            // Fall back to direct message deletion.
+        }
+
+        try {
+            await reply?.delete?.();
+        } catch (_) {}
+    }, deleteAfter);
+}
+
 async function sendErrorResponse(interaction, message, deleteAfter = 5000) {
     const errorContainer = new ContainerBuilder()
         .setAccentColor(0xff0000)
@@ -31,9 +50,7 @@ async function sendErrorResponse(interaction, message, deleteAfter = 5000) {
         });
     }
     
-    if (deleteAfter > 0) {
-        setTimeout(() => reply.delete().catch(() => {}), deleteAfter);
-    }
+    scheduleReplyDeletion(interaction, reply, deleteAfter);
     
     return reply;
 }
@@ -61,9 +78,7 @@ async function sendSuccessResponse(interaction, message, color = null, deleteAft
         });
     }
     
-    if (deleteAfter > 0) {
-        setTimeout(() => reply.delete().catch(() => {}), deleteAfter);
-    }
+    scheduleReplyDeletion(interaction, reply, deleteAfter);
     
     return reply;
 }
@@ -107,7 +122,7 @@ async function handleCommandError(interaction, error, commandName, customMessage
                 flags: MessageFlags.IsComponentsV2,
                 fetchReply: true
             });
-            setTimeout(() => reply.delete().catch(() => {}), 5000);
+            scheduleReplyDeletion(interaction, reply, 5000);
             return reply;
         } else {
             const reply = await interaction.reply({
@@ -116,7 +131,7 @@ async function handleCommandError(interaction, error, commandName, customMessage
                 ephemeral: true,
                 fetchReply: true
             });
-            setTimeout(() => reply.delete().catch(() => {}), 5000);
+            scheduleReplyDeletion(interaction, reply, 5000);
             return reply;
         }
     } catch (e) {
@@ -134,4 +149,3 @@ module.exports = {
     sendSuccessResponse,
     handleCommandError
 };
-
