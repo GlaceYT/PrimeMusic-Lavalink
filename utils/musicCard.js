@@ -1,74 +1,76 @@
 const { createCanvas, loadImage } = require("@napi-rs/canvas");
-const path = require("path");
-const fs = require('fs').promises;
-const axios = require('axios');
-const crypto = require('crypto');
+const axios = require("axios");
 
-function youtubeThumbCandidates(videoId) {
-    return [
-        `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`,
-        `https://i.ytimg.com/vi/${videoId}/sddefault.jpg`,
-        `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-        `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`,
-        `https://i.ytimg.com/vi/${videoId}/default.jpg`,
-    ];
-}
+const THEME = {
+    cardA: "#f6f4ef",
+    cardB: "#ece8e3",
+    cardBorder: "rgba(255, 255, 255, 0.70)",
+    cardInnerBorder: "rgba(0, 0, 0, 0.06)",
+    cardEdge: "rgba(0, 0, 0, 0.20)",
+    title: "#161616",
+    artist: "#2e2e2e",
+    requester: "#5f5f5f",
+    rail: "rgba(0, 0, 0, 0.14)",
+    fill: "#111111",
+    knob: "#111111",
+};
 
 function tryExtractYouTubeId(url) {
     if (!url) return null;
     try {
         const u = new URL(url);
-        if (u.hostname.includes('youtube.com')) {
-            return u.searchParams.get('v');
-        }
-        if (u.hostname === 'youtu.be') {
-            return u.pathname.slice(1);
-        }
-    } catch (e) {
+        if (u.hostname.includes("youtube.com")) return u.searchParams.get("v");
+        if (u.hostname === "youtu.be") return u.pathname.slice(1);
+    } catch (_) {
         if (/^[\w-]{11}$/.test(url)) return url;
     }
     return null;
 }
 
-async function fetchImageBuffer(url, timeout = 3000) {
+async function fetchImageBuffer(url, timeout = 2500) {
     try {
         const resp = await axios.get(url, {
-            responseType: 'arraybuffer',
+            responseType: "arraybuffer",
             timeout,
-            maxContentLength: 5 * 1024 * 1024, // 5MB max
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            },
-            validateStatus: status => status >= 200 && status < 400
+            maxContentLength: 5 * 1024 * 1024,
+            headers: { "User-Agent": "Mozilla/5.0" },
+            validateStatus: (status) => status >= 200 && status < 400,
         });
         return Buffer.from(resp.data);
-    } catch (error) {
+    } catch (_) {
         return null;
     }
 }
 
 async function getYouTubeThumbnail(videoId) {
     if (!videoId) return null;
-    
-    // Try smaller thumbnails first (faster, less memory)
     const candidates = [
-        `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`,  // Medium quality (faster)
-        `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,  // High quality fallback
-        `https://i.ytimg.com/vi/${videoId}/sddefault.jpg`,  // Standard definition
+        `https://i.ytimg.com/vi_webp/${videoId}/maxresdefault.webp`,
+        `https://i.ytimg.com/vi_webp/${videoId}/hqdefault.webp`,
+        `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg`,
+        `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+        `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`,
+        `https://i.ytimg.com/vi/${videoId}/sddefault.jpg`,
     ];
-    
     for (const url of candidates) {
-        try {
-            const buffer = await fetchImageBuffer(url, 2000); // 2 second timeout
-            if (buffer && buffer.length > 5000) { // At least 5KB
-                return buffer;
-            }
-        } catch (err) {
-            continue;
-        }
+        const buffer = await fetchImageBuffer(url);
+        if (buffer && buffer.length > 5000) return buffer;
     }
-    
     return null;
+}
+
+function clamp(v, min, max) {
+    return Math.min(max, Math.max(min, v));
+}
+
+function formatDuration(ms) {
+    if (!Number.isFinite(ms) || ms <= 0) return "0:00";
+    const totalSec = Math.floor(ms / 1000);
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+    return `${m}:${String(s).padStart(2, "0")}`;
 }
 
 class EnhancedMusicCard {
@@ -76,440 +78,348 @@ class EnhancedMusicCard {
         const config = {
             width: 900,
             height: 300,
-            thumbnailURL: options.thumbnailURL || '',
-            trackURI: options.trackURI || options.thumbnailURL || '', // Track URI for YouTube ID extraction
-            songTitle: options.songTitle || 'Unknown Track',
-            songArtist: options.songArtist || 'Unknown Artist',
-            trackRequester: options.trackRequester || 'Unknown',
-            isPlaying: options.isPlaying !== false,
-            showVisualizer: options.showVisualizer !== false,
+            thumbnailURL: options.thumbnailURL || "",
+            trackURI: options.trackURI || options.thumbnailURL || "",
+            songTitle: options.songTitle || "Unknown Track",
+            songArtist: options.songArtist || "Unknown Artist",
+            trackRequester: options.trackRequester || "Unknown",
+            currentPositionMs: Number.isFinite(options.currentPositionMs) ? options.currentPositionMs : 0,
+            totalDurationMs: Number.isFinite(options.totalDurationMs) ? options.totalDurationMs : 0,
         };
 
         try {
             const canvas = createCanvas(config.width, config.height);
             const ctx = canvas.getContext("2d");
 
-            // Draw clean background
-            await this.drawBackground(ctx, config);
-            
-            // Draw content card
-            await this.drawContentCard(ctx, config);
-            
-            // Draw thumbnail
-            await this.drawThumbnail(ctx, config);
-            
-            // Draw visualizer (always draw, but static when showVisualizer is false)
-            this.drawVisualizer(ctx, config);
-            
-            // Draw text content
-            await this.drawTextContent(ctx, config);
+            const card = this.drawMainCard(ctx, config);
+            const thumb = await this.drawThumbnail(ctx, config, card);
+            this.drawTrackMeta(ctx, config, card, thumb);
 
             return canvas.toBuffer("image/png");
-        } catch (error) {
-            console.error('Error generating music card:', error);
+        } catch (_) {
             return this.generateErrorCard(config.width, config.height);
         }
     }
 
-    async drawBackground(ctx, config) {
-        const { width, height } = config;
-        
-        // Professional dark gradient - sophisticated and clean
-        const gradient = ctx.createLinearGradient(0, 0, width, height);
-        gradient.addColorStop(0, '#0F0F23');      // Deep navy
-        gradient.addColorStop(0.3, '#1A1A2E');   // Dark slate
-        gradient.addColorStop(0.6, '#16213E');   // Darker blue-gray
-        gradient.addColorStop(1, '#0F0F23');     // Back to deep navy
-        
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, width, height);
-        
-        // Subtle radial overlay for depth (very subtle)
-        const radialGradient = ctx.createRadialGradient(
-            width * 0.75, height * 0.25, 0,
-            width * 0.75, height * 0.25, Math.max(width, height) * 0.9
-        );
-        radialGradient.addColorStop(0, 'rgba(255, 255, 255, 0.03)');
-        radialGradient.addColorStop(0.5, 'rgba(0, 0, 0, 0.1)');
-        radialGradient.addColorStop(1, 'rgba(0, 0, 0, 0.2)');
-        
-        ctx.fillStyle = radialGradient;
-        ctx.fillRect(0, 0, width, height);
-        
-        // Very subtle noise texture for professional look
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
-        ctx.fillRect(0, 0, width, height);
-    }
+    drawMainCard(ctx, config) {
+        const cardX = 22;
+        const cardY = 22;
+        const cardW = config.width - 44;
+        const cardH = config.height - 44;
+        const radius = 34;
 
-    async drawContentCard(ctx, config) {
-        const { width, height } = config;
-        const margin = 20;
-        const radius = 24;
-        
         ctx.save();
-        
-        // Professional glass morphism - subtle and clean
+        ctx.shadowColor = "rgba(0, 0, 0, 0.36)";
+        ctx.shadowBlur = 28;
+        ctx.shadowOffsetY = 12;
+        const base = ctx.createLinearGradient(cardX, cardY, cardX + cardW, cardY + cardH);
+        base.addColorStop(0, THEME.cardA);
+        base.addColorStop(1, THEME.cardB);
+        ctx.fillStyle = base;
         ctx.beginPath();
-        ctx.roundRect(margin, margin, width - margin * 2, height - margin * 2, radius);
-        
-        // Main glass effect - more subtle for professional look
-        const cardGradient = ctx.createLinearGradient(0, margin, 0, height - margin);
-        cardGradient.addColorStop(0, 'rgba(255, 255, 255, 0.08)');
-        cardGradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.04)');
-        cardGradient.addColorStop(1, 'rgba(255, 255, 255, 0.02)');
-        
-        ctx.fillStyle = cardGradient;
+        ctx.roundRect(cardX, cardY, cardW, cardH, radius);
         ctx.fill();
-        
-        // Very subtle inner highlight
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+        ctx.restore();
+
+        const glow = ctx.createRadialGradient(
+            cardX + cardW * 0.45,
+            cardY + cardH * 0.5,
+            20,
+            cardX + cardW * 0.45,
+            cardY + cardH * 0.5,
+            cardW * 0.65
+        );
+        glow.addColorStop(0, "rgba(255, 255, 255, 0.32)");
+        glow.addColorStop(1, "rgba(255, 255, 255, 0)");
+        ctx.fillStyle = glow;
         ctx.beginPath();
-        ctx.roundRect(margin + 2, margin + 2, width - margin * 2 - 4, (height - margin * 2) * 0.25, radius - 2);
+        ctx.roundRect(cardX, cardY, cardW, cardH, radius);
         ctx.fill();
-        
-        // Clean, professional border
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+
+        ctx.strokeStyle = THEME.cardBorder;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.roundRect(cardX, cardY, cardW, cardH, radius);
+        ctx.stroke();
+
+        ctx.strokeStyle = THEME.cardEdge;
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.roundRect(margin, margin, width - margin * 2, height - margin * 2, radius);
+        ctx.roundRect(cardX - 1, cardY - 1, cardW + 2, cardH + 2, radius + 1);
         ctx.stroke();
-        
-        ctx.restore();
+
+        ctx.strokeStyle = THEME.cardInnerBorder;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(cardX + 3, cardY + 3, cardW - 6, cardH - 6, radius - 2);
+        ctx.stroke();
+
+        return { x: cardX, y: cardY, w: cardW, h: cardH };
     }
 
-    async drawThumbnail(ctx, config) {
-        const { height } = config;
-        const thumbnailSize = height - 80;
-        const thumbnailX = config.width - thumbnailSize - 40;
-        const thumbnailY = 40;
-        const radius = 18;
-        const borderWidth = 4;
-        
-        // Try to extract YouTube ID from track URI first (most reliable)
-        let ytId = tryExtractYouTubeId(config.trackURI);
-        
-        // Fallback: try thumbnail URL
-        if (!ytId) {
-            ytId = tryExtractYouTubeId(config.thumbnailURL);
-        }
-        
+    async drawThumbnail(ctx, config, card) {
+        const size = card.h - 32;
+        const x = card.x + 16;
+        const y = card.y + 16;
+        const radius = 26;
+
         let buffer = null;
-        
-        // Try to get YouTube thumbnail directly (simpler, faster, more reliable)
-        if (ytId) {
-            buffer = await getYouTubeThumbnail(ytId);
-        }
-        
-        // Fallback: try original thumbnail URL if YouTube method failed
-        if (!buffer && config.thumbnailURL && config.thumbnailURL.startsWith('http')) {
-            try {
-                buffer = await fetchImageBuffer(config.thumbnailURL, 2000);
-            } catch (err) {
-                // Ignore errors, will use placeholder
+        const ytId = tryExtractYouTubeId(config.trackURI) || tryExtractYouTubeId(config.thumbnailURL);
+        if (ytId) buffer = await getYouTubeThumbnail(ytId);
+
+        if (!buffer && config.thumbnailURL && config.thumbnailURL.startsWith("http")) {
+            const candidates = [config.thumbnailURL];
+            if (ytId) {
+                candidates.push(`https://i.ytimg.com/vi/${ytId}/hqdefault.jpg`);
+                candidates.push(`https://i.ytimg.com/vi/${ytId}/mqdefault.jpg`);
+            }
+            for (const url of candidates) {
+                buffer = await fetchImageBuffer(url);
+                if (buffer && buffer.length > 5000) break;
             }
         }
-        
-        // If we got a buffer, try to load and draw it
+
         if (buffer && buffer.length > 5000) {
             try {
                 const img = await loadImage(buffer);
-                ctx.save();
-                
                 const srcW = img.width;
                 const srcH = img.height;
-                const destW = thumbnailSize;
-                const destH = thumbnailSize;
-                
-                const scaleX = destW / srcW;
-                const scaleY = destH / srcH;
-                const scale = Math.max(scaleX, scaleY);
-                
-                const scaledSrcW = destW / scale;
-                const scaledSrcH = destH / scale;
-                
-                const sw = Math.min(srcW, scaledSrcW);
-                const sh = Math.min(srcH, scaledSrcH);
-                
-                const sx = Math.floor(Math.max(0, (srcW - sw) / 2));
-                const sy = Math.floor(Math.max(0, (srcH - sh) / 2));
-                
-                ctx.beginPath();
-                ctx.roundRect(thumbnailX, thumbnailY, thumbnailSize, thumbnailSize, radius);
-                ctx.clip();
-                
-                ctx.drawImage(img, sx, sy, sw, sh, thumbnailX, thumbnailY, destW, destH);
-                ctx.restore();
-                
+                const scale = Math.max(size / srcW, size / srcH);
+                const sw = Math.min(srcW, size / scale);
+                const sh = Math.min(srcH, size / scale);
+                const sx = Math.max(0, (srcW - sw) / 2);
+                const sy = Math.max(0, (srcH - sh) / 2);
+
                 ctx.save();
-                ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
-                ctx.shadowBlur = 10;
-                ctx.shadowOffsetX = 0;
-                ctx.shadowOffsetY = 3;
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-                ctx.lineWidth = borderWidth;
                 ctx.beginPath();
-                ctx.roundRect(thumbnailX, thumbnailY, thumbnailSize, thumbnailSize, radius);
-                ctx.stroke();
-                
-                ctx.shadowColor = 'rgba(255, 255, 255, 0.2)';
-                ctx.shadowBlur = 6;
-                ctx.shadowOffsetX = 0;
-                ctx.shadowOffsetY = 0;
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                ctx.roundRect(x, y, size, size, radius);
+                ctx.clip();
+                ctx.drawImage(img, sx, sy, sw, sh, x, y, size, size);
+                ctx.restore();
+
+                ctx.strokeStyle = "rgba(255, 255, 255, 0.22)";
                 ctx.lineWidth = 1.5;
                 ctx.beginPath();
-                ctx.roundRect(
-                    thumbnailX + borderWidth / 2,
-                    thumbnailY + borderWidth / 2,
-                    thumbnailSize - borderWidth,
-                    thumbnailSize - borderWidth,
-                    radius - 1
-                );
+                ctx.roundRect(x, y, size, size, radius);
                 ctx.stroke();
-                ctx.restore();
-                
-                return; // Successfully drew thumbnail
-            } catch (err) {
-                // Fall through to placeholder
-            }
+
+                return { x, y, size };
+            } catch (_) {}
         }
-        
-        // Draw beautiful music icon placeholder
-        return this.drawThumbnailPlaceholder(ctx, thumbnailX, thumbnailY, thumbnailSize, radius);
-    }
 
-    drawThumbnailPlaceholder(ctx, x, y, size, radius = 18) {
-        ctx.save();
-        
-        // Beautiful gradient background
-        const gradient = ctx.createLinearGradient(x, y, x + size, y + size);
-        gradient.addColorStop(0, 'rgba(59, 130, 246, 0.3)');  // Blue
-        gradient.addColorStop(0.5, 'rgba(147, 51, 234, 0.3)'); // Purple
-        gradient.addColorStop(1, 'rgba(236, 72, 153, 0.3)');   // Pink
-        
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        ctx.roundRect(x, y, size, size, radius);
-        ctx.fill();
-        
-        // Subtle inner glow
-        const innerGradient = ctx.createRadialGradient(
-            x + size/2, y + size/2, 0,
-            x + size/2, y + size/2, size/2
-        );
-        innerGradient.addColorStop(0, 'rgba(255, 255, 255, 0.1)');
-        innerGradient.addColorStop(1, 'rgba(0, 0, 0, 0.2)');
-        ctx.fillStyle = innerGradient;
-        ctx.beginPath();
-        ctx.roundRect(x, y, size, size, radius);
-        ctx.fill();
-        
-        // Elegant border with glow
-        ctx.shadowColor = 'rgba(96, 165, 250, 0.5)';
-        ctx.shadowBlur = 15;
-        ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 0;
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.roundRect(x, y, size, size, radius);
-        ctx.stroke();
-        
-        // Reset shadow for icon
-        ctx.shadowColor = 'transparent';
-        
-        // Draw music note icon (more professional than emoji)
-        const iconSize = size * 0.4;
-        const iconX = x + size/2;
-        const iconY = y + size/2;
-        
-        ctx.strokeStyle = '#FFFFFF';
-        ctx.fillStyle = '#FFFFFF';
-        ctx.lineWidth = Math.max(3, size * 0.02);
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        
-        // Draw music note
-        ctx.beginPath();
-        // Note head (circle)
-        ctx.arc(iconX - iconSize * 0.15, iconY - iconSize * 0.1, iconSize * 0.12, 0, Math.PI * 2);
-        ctx.fill();
-        
-        // Note stem
-        ctx.beginPath();
-        ctx.moveTo(iconX - iconSize * 0.15, iconY - iconSize * 0.22);
-        ctx.lineTo(iconX - iconSize * 0.15, iconY + iconSize * 0.3);
-        ctx.stroke();
-        
-        // Note flag
-        ctx.beginPath();
-        ctx.moveTo(iconX - iconSize * 0.15, iconY + iconSize * 0.3);
-        ctx.quadraticCurveTo(
-            iconX - iconSize * 0.1, iconY + iconSize * 0.25,
-            iconX + iconSize * 0.1, iconY + iconSize * 0.2
-        );
-        ctx.quadraticCurveTo(
-            iconX + iconSize * 0.15, iconY + iconSize * 0.15,
-            iconX + iconSize * 0.1, iconY + iconSize * 0.1
-        );
-        ctx.stroke();
-        
-        // Add subtle shine effect
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-        ctx.beginPath();
-        ctx.arc(iconX - iconSize * 0.15, iconY - iconSize * 0.1, iconSize * 0.08, 0, Math.PI * 2);
-        ctx.fill();
-        
-        ctx.restore();
-    }
+        if (config.thumbnailURL && config.thumbnailURL.startsWith("http")) {
+            try {
+                const img = await loadImage(config.thumbnailURL);
+                const srcW = img.width;
+                const srcH = img.height;
+                const scale = Math.max(size / srcW, size / srcH);
+                const sw = Math.min(srcW, size / scale);
+                const sh = Math.min(srcH, size / scale);
+                const sx = Math.max(0, (srcW - sw) / 2);
+                const sy = Math.max(0, (srcH - sh) / 2);
 
-    drawVisualizer(ctx, config) {
-        const barCount = 32;
-        const barWidth = 8;
-        const barSpacing = 4;
-        const maxBarHeight = 70;
-        const minBarHeight = 15;
-        const startX = 50;
-        const baseY = config.height - 40;
-        
-        ctx.save();
-        
-        const isDynamic = config.showVisualizer && config.isPlaying;
-        
-        for (let i = 0; i < barCount; i++) {
-            let barHeight;
-            
-            if (isDynamic) {
-                const wavePhase1 = (i / barCount) * Math.PI * 4;
-                const wavePhase2 = (i / barCount) * Math.PI * 2.5;
-                const wavePhase3 = (i / barCount) * Math.PI * 6;
-                
-                const wave1 = Math.sin(wavePhase1) * 0.5;
-                const wave2 = Math.sin(wavePhase2) * 0.3;
-                const wave3 = Math.sin(wavePhase3) * 0.2;
-                const randomFactor = (Math.random() - 0.5) * 0.3;
-                const combinedWave = wave1 + wave2 + wave3 + randomFactor;
-                
-                const normalizedWave = (combinedWave + 1) / 2;
-                barHeight = minBarHeight + (maxBarHeight - minBarHeight) * normalizedWave;
-            } else {
-                const staticHeight = minBarHeight + (maxBarHeight - minBarHeight) * 0.5;
-                barHeight = staticHeight;
-            }
-            
-            const x = startX + i * (barWidth + barSpacing);
-            
-            const barGradient = ctx.createLinearGradient(0, baseY - barHeight, 0, baseY);
-            barGradient.addColorStop(0, '#60A5FA');
-            barGradient.addColorStop(0.5, '#3B82F6');
-            barGradient.addColorStop(1, '#1E40AF');
-            
-            ctx.fillStyle = barGradient;
-            ctx.beginPath();
-            ctx.roundRect(x, baseY - barHeight, barWidth, barHeight, barWidth/2);
-            ctx.fill();
-            
-            if (isDynamic) {
                 ctx.save();
-                ctx.shadowColor = 'rgba(96, 165, 250, 0.4)';
-                ctx.shadowBlur = 8;
-                ctx.globalCompositeOperation = 'screen';
-                ctx.fill();
+                ctx.beginPath();
+                ctx.roundRect(x, y, size, size, radius);
+                ctx.clip();
+                ctx.drawImage(img, sx, sy, sw, sh, x, y, size, size);
                 ctx.restore();
-            }
+
+                ctx.strokeStyle = "rgba(255, 255, 255, 0.22)";
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.roundRect(x, y, size, size, radius);
+                ctx.stroke();
+
+                return { x, y, size };
+            } catch (_) {}
         }
-        
-        ctx.restore();
+
+        ctx.fillStyle = "#101522";
+        ctx.beginPath();
+        ctx.roundRect(x, y, size, size, radius);
+        ctx.fill();
+
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.22)";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.roundRect(x, y, size, size, radius);
+        ctx.stroke();
+
+        ctx.fillStyle = "rgba(255,255,255,0.90)";
+        const px = x + size * 0.42;
+        const py = y + size * 0.34;
+        const pz = size * 0.28;
+        ctx.beginPath();
+        ctx.moveTo(px, py);
+        ctx.lineTo(px, py + pz);
+        ctx.lineTo(px + pz * 0.85, py + pz * 0.5);
+        ctx.closePath();
+        ctx.fill();
+
+        return { x, y, size };
     }
 
-    async drawTextContent(ctx, config) {
-        const maxWidth = config.width - 320;
-        const startX = 50;
-        const startY = 60;
-        
-        // Song title - Enhanced with better shadow
-        ctx.save();
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = 'bold 40px Poppins, Segoe UI, Helvetica Neue, Arial, sans-serif';
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'top';
-        
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
-        ctx.shadowBlur = 6;
-        ctx.shadowOffsetX = 1;
-        ctx.shadowOffsetY = 2;
-        
-        const truncatedTitle = this.truncateText(ctx, config.songTitle, maxWidth);
-        ctx.fillText(truncatedTitle, startX, startY);
-        
-        // Get title height for proper spacing
-        const titleMetrics = ctx.measureText(truncatedTitle);
-        const titleHeight = 40; // Font size
-        ctx.restore();
-        
-        // Song artist - Better contrast with proper spacing
-        ctx.save();
-        ctx.fillStyle = '#E5E7EB';
-        ctx.font = '28px Poppins, Segoe UI, Helvetica Neue, Arial, sans-serif';
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'top';
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
-        ctx.shadowBlur = 3;
-        ctx.shadowOffsetX = 1;
-        ctx.shadowOffsetY = 1;
-        
-        const truncatedArtist = this.truncateText(ctx, config.songArtist, maxWidth);
-        const artistY = startY + titleHeight + 12; // 12px gap after title
-        ctx.fillText(truncatedArtist, startX, artistY);
-        
-        // Get artist height for proper spacing
-        const artistHeight = 28; // Font size
-        ctx.restore();
-        
-        // Requester - Professional subtle style with proper spacing
-        ctx.save();
-        ctx.fillStyle = '#9CA3AF';  // Professional gray
-        ctx.font = 'bold 19px Poppins, Segoe UI, Helvetica Neue, Arial, sans-serif';
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'top';
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
-        ctx.shadowBlur = 2;
-        ctx.shadowOffsetY = 1;
-        
-        const requesterText = `Requested by: ${config.trackRequester}`;
-        const requesterY = artistY + artistHeight + 10; // 10px gap after artist
-        ctx.fillText(requesterText, startX, requesterY);
-        ctx.restore();
+    drawTrackMeta(ctx, config, card, thumb) {
+        const textX = thumb.x + thumb.size + 34;
+        const textRight = card.x + card.w - 34;
+        const maxTextW = textRight - textX;
+
+        ctx.textAlign = "left";
+        ctx.textBaseline = "alphabetic";
+
+        // Top status badge
+        const badgeText = "NOW PLAYING";
+        const topBadgeY = card.y + 24;
+        ctx.font = "700 14px Segoe UI, Arial, sans-serif";
+        const topBadgePadX = 12;
+        const topBadgeH = 22;
+        const topBadgeW = ctx.measureText(badgeText).width + topBadgePadX * 2;
+        const topBadgeGradient = ctx.createLinearGradient(textX, topBadgeY, textX + topBadgeW, topBadgeY + topBadgeH);
+        topBadgeGradient.addColorStop(0, "#1f2937");
+        topBadgeGradient.addColorStop(1, "#111827");
+        ctx.fillStyle = topBadgeGradient;
+        ctx.beginPath();
+        ctx.roundRect(textX, topBadgeY, topBadgeW, topBadgeH, 11);
+        ctx.fill();
+        ctx.fillStyle = "#f8fafc";
+        ctx.textBaseline = "middle";
+        ctx.fillText(badgeText, textX + topBadgePadX, topBadgeY + topBadgeH / 2 + 0.5);
+        ctx.textBaseline = "alphabetic";
+
+        const titleY = topBadgeY + 62;
+        ctx.fillStyle = THEME.title;
+        ctx.font = "700 34px Segoe UI, Arial, sans-serif";
+        const title = this.truncateText(ctx, config.songTitle, maxTextW);
+        ctx.fillText(title, textX, titleY);
+
+        const artistY = titleY + 44;
+        const artistBadgeSize = 18;
+        ctx.fillStyle = "#161616";
+        ctx.beginPath();
+        ctx.roundRect(textX, artistY - 14, artistBadgeSize, artistBadgeSize, 5);
+        ctx.fill();
+        ctx.fillStyle = "#f5f5f5";
+        ctx.font = "700 12px Segoe UI, Arial, sans-serif";
+        ctx.textBaseline = "middle";
+        ctx.fillText("S", textX + 5, artistY - 5);
+        ctx.textBaseline = "alphabetic";
+
+        ctx.fillStyle = THEME.artist;
+        ctx.font = "600 24px Segoe UI, Arial, sans-serif";
+        const artist = this.truncateText(ctx, config.songArtist, maxTextW - 30);
+        ctx.fillText(artist, textX + 28, artistY);
+
+        if (config.trackRequester && config.trackRequester !== "Unknown") {
+            ctx.fillStyle = THEME.requester;
+            ctx.font = "500 17px Segoe UI, Arial, sans-serif";
+            const req = this.truncateText(ctx, `Requested by ${config.trackRequester}`, maxTextW);
+            ctx.fillText(req, textX, artistY + 34);
+        }
+
+        const totalText = config.totalDurationMs > 0 ? formatDuration(config.totalDurationMs) : "LIVE";
+        const progress = config.totalDurationMs > 0
+            ? clamp(config.currentPositionMs / config.totalDurationMs, 0, 1)
+            : 0;
+        const visibleProgress = progress > 0 ? Math.max(progress, 0.08) : 0.18;
+
+        const bottomY = card.y + card.h - 28;
+        const cx = textX + 10;
+        const cy = bottomY - 4;
+        const r = 10;
+
+        // Small circle progress on the left.
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = THEME.rail;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.stroke();
+
+        const ringGradient = ctx.createLinearGradient(cx - r, cy - r, cx + r, cy + r);
+        ringGradient.addColorStop(0, "#111111");
+        ringGradient.addColorStop(0.5, "#1f1f1f");
+        ringGradient.addColorStop(1, "#3b3b3b");
+        ctx.strokeStyle = ringGradient;
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * visibleProgress);
+        ctx.stroke();
+
+        // Center glow so the indicator never looks empty.
+        const centerGradient = ctx.createRadialGradient(cx, cy, 1, cx, cy, 5);
+        centerGradient.addColorStop(0, "rgba(17, 17, 17, 0.95)");
+        centerGradient.addColorStop(1, "rgba(17, 17, 17, 0.70)");
+        ctx.fillStyle = centerGradient;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // End timer chip on bottom-right.
+        ctx.font = "500 20px Segoe UI, Arial, sans-serif";
+        const totalW = ctx.measureText(totalText).width;
+        const timeChipPadX = 12;
+        const timeChipH = 30;
+        const clockSize = 12;
+        const timeChipW = totalW + timeChipPadX * 2 + clockSize + 8;
+        const timeChipX = textRight - timeChipW;
+        const timeChipY = cy - timeChipH / 2;
+
+        const chipGradient = ctx.createLinearGradient(timeChipX, timeChipY, timeChipX + timeChipW, timeChipY + timeChipH);
+        chipGradient.addColorStop(0, "rgba(230, 226, 219, 0.92)");
+        chipGradient.addColorStop(1, "rgba(214, 209, 201, 0.92)");
+        ctx.fillStyle = chipGradient;
+        ctx.beginPath();
+        ctx.roundRect(timeChipX, timeChipY, timeChipW, timeChipH, 15);
+        ctx.fill();
+        ctx.strokeStyle = "rgba(0, 0, 0, 0.10)";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect(timeChipX, timeChipY, timeChipW, timeChipH, 15);
+        ctx.stroke();
+
+        // Clock icon
+        const clockX = timeChipX + timeChipPadX + clockSize / 2;
+        const clockY = cy;
+        const clockGradient = ctx.createLinearGradient(clockX - 6, clockY - 6, clockX + 6, clockY + 6);
+        clockGradient.addColorStop(0, "#111111");
+        clockGradient.addColorStop(1, "#3a3a3a");
+        ctx.strokeStyle = clockGradient;
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.arc(clockX, clockY, clockSize / 2, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(clockX, clockY);
+        ctx.lineTo(clockX, clockY - 3.2);
+        ctx.moveTo(clockX, clockY);
+        ctx.lineTo(clockX + 2.8, clockY + 1.8);
+        ctx.stroke();
+
+        ctx.fillStyle = THEME.artist;
+        ctx.textBaseline = "middle";
+        ctx.fillText(totalText, timeChipX + timeChipPadX + clockSize + 8, cy);
     }
 
     truncateText(ctx, text, maxWidth) {
-        if (ctx.measureText(text).width <= maxWidth) {
-            return text;
+        if (ctx.measureText(text).width <= maxWidth) return text;
+        let out = text;
+        while (out.length > 0 && ctx.measureText(`${out}...`).width > maxWidth) {
+            out = out.slice(0, -1);
         }
-        let truncated = text;
-        while (ctx.measureText(truncated + '...').width > maxWidth && truncated.length > 0) {
-            truncated = truncated.slice(0, -1);
-        }
-        return truncated + '...';
+        return `${out}...`;
     }
 
     generateErrorCard(width, height) {
         const canvas = createCanvas(width, height);
         const ctx = canvas.getContext("2d");
-        
-        ctx.fillStyle = '#FF4444';
+        ctx.fillStyle = "#1c1c1c";
         ctx.fillRect(0, 0, width, height);
-        
-        ctx.fillStyle = '#FFFFFF';
-        ctx.font = 'bold 24px Poppins, Segoe UI, Helvetica Neue, Arial, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('Error generating music card', width/2, height/2);
-        
+        ctx.fillStyle = "#fff";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.font = "700 28px Arial";
+        ctx.fillText("Music card render failed", width / 2, height / 2);
         return canvas.toBuffer("image/png");
     }
 }
 
 module.exports = { EnhancedMusicCard };
-
-
