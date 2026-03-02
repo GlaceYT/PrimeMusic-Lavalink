@@ -92,7 +92,6 @@ class StatusManager {
             if (success) return;
             success = await this.createChannelTopic(voiceChannel, trackTitle);
             if (success) return;
-            await this.createChannelName(voiceChannel, trackTitle);
         } catch (error) {
             console.error(`❌ Voice channel status creation failed: ${error.message}`);
         }
@@ -135,7 +134,6 @@ class StatusManager {
             if (success) return;
             success = await this.deleteChannelTopic(voiceChannel);
             if (success) return;
-            await this.deleteChannelName(voiceChannel);
         } catch (error) {
             console.error(`❌ Voice channel status clearing failed: ${error.message}`);
         }
@@ -184,6 +182,7 @@ class StatusManager {
             const originalTopic = originalData?.originalTopic || null;
             
             await voiceChannel.setTopic(originalTopic);
+            this.voiceChannelData.delete(voiceChannel.id);
             return true;
         } catch (error) {
             return false;
@@ -271,4 +270,3 @@ class StatusManager {
 }
 
 module.exports = StatusManager;
-
