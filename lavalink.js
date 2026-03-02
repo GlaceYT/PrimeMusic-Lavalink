@@ -3,39 +3,6 @@ const config = require("./config.js");
 const colors = require('./UI/colors/colors');
 const axios = require('axios');
 
-function patchPlayerVoiceChannelId(player) {
-    const connection = player?.connection;
-    if (!connection || connection.__voiceChannelIdPatched) return;
-
-    connection.__voiceChannelIdPatched = true;
-    connection.voice = connection.voice || {};
-
-    if (!connection.voice.channelId && player.voiceChannel) {
-        connection.voice.channelId = player.voiceChannel;
-    }
-
-    if (typeof connection.setStateUpdate === "function") {
-        const originalSetStateUpdate = connection.setStateUpdate.bind(connection);
-        connection.setStateUpdate = (data) => {
-            originalSetStateUpdate(data);
-            const channelId = data?.channel_id || connection.voiceChannel || player.voiceChannel || null;
-            if (channelId) {
-                connection.voice.channelId = channelId;
-            }
-        };
-    }
-
-    if (typeof connection.updatePlayerVoiceData === "function") {
-        const originalUpdatePlayerVoiceData = connection.updatePlayerVoiceData.bind(connection);
-        connection.updatePlayerVoiceData = () => {
-            if (!connection.voice.channelId) {
-                connection.voice.channelId = connection.voiceChannel || player.voiceChannel || null;
-            }
-            originalUpdatePlayerVoiceData();
-        };
-    }
-}
-
 let getLangSync;
 try {
     const langLoader = require('./utils/languageLoader.js');
@@ -110,10 +77,6 @@ class LavalinkNodeManager {
                 autoResume: true,
                 resumeKey: "PrimeMusic",
                 resumeTimeout: 30000,
-            });
-
-            this.riffy.on("playerCreate", (player) => {
-                patchPlayerVoiceChannelId(player);
             });
 
             this.setupEventListeners();
