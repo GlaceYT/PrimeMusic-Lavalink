@@ -24,6 +24,39 @@ const progressUpdateIntervals = new Map();
 const musicCard = new EnhancedMusicCard();
 const useGeneratedSongCard = config.generateSongCard !== false;
 
+function patchVoiceChannelIdSupport(player) {
+    const connection = player?.connection;
+    if (!connection || connection.__voiceChannelIdPatchApplied) return;
+
+    connection.__voiceChannelIdPatchApplied = true;
+    connection.voice = connection.voice || {};
+
+    if (!connection.voice.channelId && player.voiceChannel) {
+        connection.voice.channelId = player.voiceChannel;
+    }
+
+    if (typeof connection.setStateUpdate === "function") {
+        const originalSetStateUpdate = connection.setStateUpdate.bind(connection);
+        connection.setStateUpdate = (data) => {
+            originalSetStateUpdate(data);
+            const channelId = data?.channel_id || connection.voiceChannel || player.voiceChannel || null;
+            if (channelId) {
+                connection.voice.channelId = channelId;
+            }
+        };
+    }
+
+    if (typeof connection.updatePlayerVoiceData === "function") {
+        const originalUpdatePlayerVoiceData = connection.updatePlayerVoiceData.bind(connection);
+        connection.updatePlayerVoiceData = () => {
+            if (!connection.voice.channelId) {
+                connection.voice.channelId = connection.voiceChannel || player.voiceChannel || null;
+            }
+            originalUpdatePlayerVoiceData();
+        };
+    }
+}
+
 function stripMediaGallery(components = []) {
     return components.filter((component) => !(component instanceof MediaGalleryBuilder));
 }
@@ -104,6 +137,10 @@ async function initializePlayer(client) {
     client.riffy = nodeManager.riffy;
     client.lavalinkManager = nodeManager;
     client.nodeManager = nodeManager;
+
+    client.riffy.on("playerCreate", (player) => {
+        patchVoiceChannelIdSupport(player);
+    });
 
     client.riffy.on("trackException", async (player, error) => {
         const langSync = getLangSync();
