@@ -23,6 +23,8 @@ const nowPlayingMessages = new Map();
 const progressUpdateIntervals = new Map();
 const musicCard = new EnhancedMusicCard();
 const useGeneratedSongCard = config.generateSongCard !== false;
+const enableVoiceChannelIdPatch = config.enableVoiceChannelIdPatch === true;
+const voiceDebug = config.voiceDebug === true;
 
 function patchVoiceChannelIdSupport(player) {
     const connection = player?.connection;
@@ -43,6 +45,9 @@ function patchVoiceChannelIdSupport(player) {
             if (channelId) {
                 connection.voice.channelId = channelId;
             }
+            if (voiceDebug) {
+                console.log(`[ VOICE DEBUG ] stateUpdate guild=${player.guildId} channelId=${channelId || 'null'} sessionId=${data?.session_id ? 'yes' : 'no'}`);
+            }
         };
     }
 
@@ -51,6 +56,10 @@ function patchVoiceChannelIdSupport(player) {
         connection.updatePlayerVoiceData = () => {
             if (!connection.voice.channelId) {
                 connection.voice.channelId = connection.voiceChannel || player.voiceChannel || null;
+            }
+            if (voiceDebug) {
+                const v = connection.voice || {};
+                console.log(`[ VOICE DEBUG ] updatePlayerVoiceData guild=${player.guildId} channelId=${v.channelId || 'null'} sessionId=${v.sessionId ? 'yes' : 'no'} token=${v.token ? 'yes' : 'no'} endpoint=${v.endpoint ? 'yes' : 'no'}`);
             }
             originalUpdatePlayerVoiceData();
         };
@@ -139,7 +148,12 @@ async function initializePlayer(client) {
     client.nodeManager = nodeManager;
 
     client.riffy.on("playerCreate", (player) => {
-        patchVoiceChannelIdSupport(player);
+        if (enableVoiceChannelIdPatch) {
+            patchVoiceChannelIdSupport(player);
+        }
+        if (voiceDebug) {
+            console.log(`[ VOICE DEBUG ] playerCreate guild=${player.guildId} voiceChannel=${player.voiceChannel || 'null'} patch=${enableVoiceChannelIdPatch ? 'on' : 'off'}`);
+        }
     });
 
     client.riffy.on("trackException", async (player, error) => {
